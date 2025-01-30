@@ -12,8 +12,11 @@ import sys
 from robotaxi.agent import HumanAgent
 from robotaxi.gameplay.entities import (CellType, SnakeAction, SnakeDirection, ALL_SNAKE_DIRECTIONS, ALL_SNAKE_ACTIONS, SNAKE_GROW, WALL_WARP, Point)
 from robotaxi.gameplay.environment import PLAY_SOUND
+from robotaxi.gui.python_client import Trigger
 
 frame_ct = -1
+parallel = Trigger('ARDUINO')
+parallel.init(1)
 
 class captureThread(threading.Thread):
 
@@ -759,7 +762,8 @@ class PyGameGUI:
                 
                 for event in pygame.event.get():
                     if event.type == pygame.KEYDOWN:
-                        if event.key == pygame.K_RETURN:
+                        # if event.key == pygame.K_RETURN:
+                        if event.key == pygame.K_SPACE:
                              self.selected = True
                              #self.pause = False                        
                         elif event.key == pygame.K_RIGHT:
@@ -907,6 +911,9 @@ class PyGameGUI:
                 
                 # ADD ErrP trigger here
                 # VEHICLE STARTED TO MOVE...
+                parallel.signal(1)
+           
+                print(1)
                 
                 if self.collaborating_agent is not None:
                     self.env.choose_action_collaborator(collaborator_action)
@@ -1006,9 +1013,15 @@ class PyGameGUI:
                             if minus_button.collidepoint(event.pos):
                                 feedback_log.append({"time": time.time(), "reward": -1})
                                 minus_button_pressed = True  # Set pressed state
+                                parallel.signal(3) #send trigger code 3
+                         
+                                print(3)
                             elif plus_button.collidepoint(event.pos):
                                 feedback_log.append({"time": time.time(), "reward": +1})
                                 plus_button_pressed = True  # Set pressed state
+                                parallel.signal(2) #send trigger code 2
+                             
+                                print(2)
                         
                         if event.type == pygame.MOUSEBUTTONUP and collect_feedback:
                             minus_button_pressed = False  # Reset pressed state
