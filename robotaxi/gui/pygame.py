@@ -15,8 +15,8 @@ from robotaxi.gameplay.environment import PLAY_SOUND
 from robotaxi.gui.python_client import Trigger
 
 frame_ct = -1
-parallel = Trigger('ARDUINO')
-parallel.init(1)
+# parallel = Trigger('USB2LPT')
+# parallel.init(50)
 
 class captureThread(threading.Thread):
 
@@ -145,6 +145,9 @@ class PyGameGUI:
         self.marker_font =  pygame.font.Font("fonts/OpenSans-Bold.ttf", int(12*(self.CELL_SIZE/40.0)))
         pygame.display.set_caption('Robotaxi')
 
+        ##################################"serial port"#############################################
+        self.parallel = Trigger('ARDUINO')
+        self.parallel.init(50)
     def set_icon_scheme(self, idx):
         scheme = self.car_schemes[idx]
         self.south = pygame.transform.scale(pygame.image.load("icon/"+scheme+"_south.png"),(self.CELL_SIZE, self.CELL_SIZE-5))
@@ -911,7 +914,8 @@ class PyGameGUI:
                 
                 # ADD ErrP trigger here
                 # VEHICLE STARTED TO MOVE...
-                parallel.signal(1)
+                # parallel.signal(100)
+                self.parallel.signal(100)
            
                 print(1)
                 
@@ -1013,13 +1017,15 @@ class PyGameGUI:
                             if minus_button.collidepoint(event.pos):
                                 feedback_log.append({"time": time.time(), "reward": -1})
                                 minus_button_pressed = True  # Set pressed state
-                                parallel.signal(3) #send trigger code 3
+                                # parallel.signal(103) #send trigger code 3
+                                self.parallel.signal(103)
                          
                                 print(3)
                             elif plus_button.collidepoint(event.pos):
                                 feedback_log.append({"time": time.time(), "reward": +1})
                                 plus_button_pressed = True  # Set pressed state
-                                parallel.signal(2) #send trigger code 2
+                                # parallel.signal(102) #send trigger code 2
+                                self.parallel.signal(102)
                              
                                 print(2)
                         
