@@ -30,7 +30,7 @@ def parse_command_line_args(args):
     parser.add_argument(
         '--agent',
         type=str,
-        default='human',
+        default='random',
         choices=['human', 'dqn', 'random', 'val-itr', 'mixed', 'one-hot-dqn', 'tile-coding', 'reward-learning', 'a2c'],
         help='Player agent to use.',
     )
