@@ -12,7 +12,8 @@ import sys
 from robotaxi.agent import HumanAgent
 from robotaxi.gameplay.entities import (CellType, SnakeAction, SnakeDirection, ALL_SNAKE_DIRECTIONS, ALL_SNAKE_ACTIONS, SNAKE_GROW, WALL_WARP, Point)
 from robotaxi.gameplay.environment import PLAY_SOUND
-from robotaxi.gui.python_client import Trigger
+# from robotaxi.gui.python_client import Trigger
+from robotaxi.gui.python_client_np import Trigger
 
 frame_ct = -1
 # parallel = Trigger('USB2LPT')
@@ -146,7 +147,8 @@ class PyGameGUI:
         pygame.display.set_caption('Robotaxi')
 
         ##################################"serial port"#############################################
-        self.parallel = Trigger('ARDUINO')
+        # self.parallel = Trigger('ARDUINO')
+        self.parallel = Trigger('USB2LPT')
         self.parallel.init(50)
     def set_icon_scheme(self, idx):
         scheme = self.car_schemes[idx]
