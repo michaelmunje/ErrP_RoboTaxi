@@ -8,13 +8,16 @@ Swiss Federal Institute of Technology Lausanne (EPFL)
 """
 
 import threading
-import parallel
 import platform
 import os
 import sys
 import ctypes
 import time
 from builtins import input, bytes
+
+DEBUG_MODE = int(os.getenv("DEBUG_MODE", "0"))
+if not DEBUG_MODE:
+    import parallel
 
 class Trigger(object):
     """
@@ -82,7 +85,7 @@ class Trigger(object):
             self.print('Loading %s' % dllpath)
             self.lpt = ctypes.cdll.LoadLibrary(dllpath)
 
-        elif self.lpttype is "USB2LPT" and platform.system() == "Linux":
+        elif self.lpttype == "USB2LPT" and platform.system() == "Linux":
             self.portaddr = "/dev/parport0"
             self.lpt = parallel.Parallel(self.portaddr)
 
@@ -153,7 +156,7 @@ class Trigger(object):
             sys.stdout.flush()
 
     def print(self, *args):
-        qc.print_c('[pyLptControl] ', color='w', end='')
+        # qc.print_c('[pyLptControl] ', color='w', end='')
         print(*args)
 
     def init(self, duration):
