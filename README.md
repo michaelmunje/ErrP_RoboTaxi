@@ -48,3 +48,20 @@ python render_from_log.py --log_file <log_file_name> [--original] [--save_frames
 ```
 
 
+## ErrP Data Collection
+```
+git fetch
+git checkout xbox_ctrl
+
+# For running without Arduino and with Controller, use
+DEBUG_MODE=1 CONTROLLER=XBOX python record_feedback.py
+
+# For running with Arduino and without Controller
+# (mouse clicking + -  always works), use
+python record_feedback.py
+
+# For running with Arduino and with Controller, use
+CONTROLLER=XBOX python record_feedback.py
+```
+
+
