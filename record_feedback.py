@@ -31,7 +31,7 @@ def parse_command_line_args(args):
         '--agent',
         type=str,
         default='random',
-        choices=['human', 'dqn', 'random', 'val-itr', 'mixed', 'one-hot-dqn', 'tile-coding', 'reward-learning', 'a2c'],
+        choices=['human', 'dqn', 'random', 'val-itr', 'mixed', 'one-hot-dqn', 'tile-coding', 'reward-learning', 'a2c', 'ppo'],
         help='Player agent to use.',
     )
     parser.add_argument(
@@ -146,6 +146,10 @@ def create_agent(name, model, dimension, env, reward_mapping=None):
         return RewardLearningAgent()
     elif name == 'a2c':
         return A2CAgent(grid_size=dimension, env=env)
+    elif name == 'ppo':
+        # from robotaxi.agent import PPOAgent
+        from robotaxi.agent.ppo_agent import PPOAgent
+        return PPOAgent(model_path="ppo_robottaxi.zip")
     raise KeyError(f'Unknown agent type: "{name}"')
 
 
