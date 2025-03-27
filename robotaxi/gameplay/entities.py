@@ -206,7 +206,7 @@ class Field(object):
         """ Create a new field based on the level map. """
         try:
             if init_cells:
-                print(self.level_map)
+                # print(self.level_map)
                 self._cells = np.array([
                     [self._level_map_to_cell_type[symbol] for symbol in line]
                     for line in self.level_map

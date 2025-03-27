@@ -12,8 +12,11 @@ import sys
 from robotaxi.agent import HumanAgent
 from robotaxi.gameplay.entities import (CellType, SnakeAction, SnakeDirection, ALL_SNAKE_DIRECTIONS, ALL_SNAKE_ACTIONS, SNAKE_GROW, WALL_WARP, Point)
 from robotaxi.gameplay.environment import PLAY_SOUND
+from robotaxi.gui.python_client import Trigger
 
 frame_ct = -1
+# parallel = Trigger('USB2LPT')
+# parallel.init(50)
 
 class captureThread(threading.Thread):
 
@@ -77,6 +80,20 @@ class PyGameGUI:
         #pygame.mixer.pre_init(44100, -16, 2, 32)
         pygame.init()
         pygame.mixer.init()
+
+        controller = os.getenv("CONTROLLER", "MOUSE")
+        if controller == "XBOX":
+            pygame.joystick.init()
+            
+            # Check if any joystick is connected
+            if pygame.joystick.get_count() == 0:
+                print("No Xbox controller detected. Exiting gracefully.")
+                sys.exit(1)  # Exit with an error code (1 means failure)
+
+            # Initialize the first available joystick
+            self.controller = pygame.joystick.Joystick(0)
+            self.controller.init()
+            print(f"Detected controller: {self.controller.get_name()}")
         
         pygame.mouse.set_visible(False)
         self.punch_sound = pygame.mixer.Sound('sound/punch.wav')
@@ -142,6 +159,13 @@ class PyGameGUI:
         self.marker_font =  pygame.font.Font("fonts/OpenSans-Bold.ttf", int(12*(self.CELL_SIZE/40.0)))
         pygame.display.set_caption('Robotaxi')
 
+        ##################################"serial port"#############################################
+        DEBUG_MODE = int(os.getenv("DEBUG_MODE", "0"))
+        if DEBUG_MODE:
+            self.parallel = Trigger('FAKE')
+        else:
+            self.parallel = Trigger('ARDUINO')
+        self.parallel.init(50)
     def set_icon_scheme(self, idx):
         scheme = self.car_schemes[idx]
         self.south = pygame.transform.scale(pygame.image.load("icon/"+scheme+"_south.png"),(self.CELL_SIZE, self.CELL_SIZE-5))
@@ -759,7 +783,8 @@ class PyGameGUI:
                 
                 for event in pygame.event.get():
                     if event.type == pygame.KEYDOWN:
-                        if event.key == pygame.K_RETURN:
+                        # if event.key == pygame.K_RETURN:
+                        if event.key == pygame.K_SPACE:
                              self.selected = True
                              #self.pause = False                        
                         elif event.key == pygame.K_RIGHT:
@@ -907,6 +932,10 @@ class PyGameGUI:
                 
                 # ADD ErrP trigger here
                 # VEHICLE STARTED TO MOVE...
+                # parallel.signal(100)
+                self.parallel.signal(100)
+           
+                print(1)
                 
                 if self.collaborating_agent is not None:
                     self.env.choose_action_collaborator(collaborator_action)
@@ -1001,16 +1030,33 @@ class PyGameGUI:
 
                         if event.type == pygame.QUIT:
                             self.quit_game()
-                            
-                        if event.type == pygame.MOUSEBUTTONDOWN and collect_feedback:
-                            if minus_button.collidepoint(event.pos):
+
+                        if collect_feedback:
+                            flag_reward_minus, flag_reward_plus = False, False
+                            if event.type == pygame.MOUSEBUTTONDOWN:
+                                print(f"Button {event.button} pressed")
+                                flag_reward_minus |= (not minus_button_pressed) and minus_button.collidepoint(event.pos)
+                                flag_reward_plus  |= (not plus_button_pressed) and plus_button.collidepoint(event.pos)
+
+                            if event.type == pygame.JOYBUTTONDOWN:
+                                print(f"JOY Button {event.button} pressed")
+                                flag_reward_minus |= (not minus_button_pressed) and (event.button == 4) # Xbox controller LB
+                                flag_reward_plus  |= (not plus_button_pressed) and (event.button == 5) # Xbox controller RB
+
+
+                            if flag_reward_minus:
                                 feedback_log.append({"time": time.time(), "reward": -1})
                                 minus_button_pressed = True  # Set pressed state
-                            elif plus_button.collidepoint(event.pos):
+                                self.parallel.signal(103)
+                                print(3)
+                                
+                            if flag_reward_plus:
                                 feedback_log.append({"time": time.time(), "reward": +1})
                                 plus_button_pressed = True  # Set pressed state
+                                self.parallel.signal(102)
+                                print(2)
                         
-                        if event.type == pygame.MOUSEBUTTONUP and collect_feedback:
+                        if event.type == pygame.MOUSEBUTTONUP or event.type == pygame.JOYBUTTONUP:
                             minus_button_pressed = False  # Reset pressed state
                             plus_button_pressed = False   # Reset pressed state
 

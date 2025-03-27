@@ -1,0 +1,32 @@
+Good, we now have a pipeline to train and visualize a PPO agent.  
+We also have a pipeline to train and visualize a TAMER agent.  
+
+We have a couple of featurizers that can convert state information into PPO features and TAMER features, which are different.  
+
+For TAMER, we need an evaluator (human), which can be expensive, so we built an oracle human evaluator.  
+
+TAMER also relies on an environment model that, given \(s_t, a_t\), predicts \(s_{t+1}\). We built such a model; however, it is not perfect because game objects can spawn at arbitrary locations, which we may not know in advance until they appear (check the game code to determine where and when they are spawned).  
+
+To address this, we only update the TAMER weights when the model is accurate. This is slightly different from the original implementation.  
+
+For featurizers, check out `robotaxi/gameplay/wrappers.py`.  
+
+For the PPO pipeline, use:
+- `zh_train_ppo3.py` and `zh_visualize_ppo.py`  
+  - The agent is defined in `robotaxi/agent/ppo_agent.py`.  
+  - We use sb3's PPO implementation, we also write a wrapper to gymnasium's environment.
+
+For the TAMER pipeline, use:
+- `zh_train_tamer_v2.py` and `zh_visualize_tamer.py`  
+  - The agent is defined in `robotaxi/agent/tamer_agent.py`.  
+
+### Preliminary Results  
+- With an oracle (proxy) human evaluator, where the signal can be \([-1, 0, 1]\) or a more precise reward, and using `(lr, steps) = (0.01, 1e4)`, the resulting agent performs well—assuming the weights are initialized properly, which is the case most of the time.  
+- Even if the proxy human evaluator has a 10% chance of outputting a random signal (where the signal can be \([-1, 0, 1]\)), the resulting agent is still performant.  
+
+### TODO  
+- Generalize the preliminary results to allow for more evaluations with multiple random seeds (also add code to fix the seed).  
+- Analyze how the accuracy of the human evaluator affects the TAMER agent.  
+
+### Optional  
+- Investigate the game's target spawn implementations.  
