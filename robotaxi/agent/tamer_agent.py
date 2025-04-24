@@ -151,7 +151,8 @@ class TAMERAgent(AgentBase):
 
         # Check bounds and obstacles; if hit, keep head and body unchanged
         if not (0 <= new_head_x < rows and 0 <= new_head_y < cols) or grid[new_head_x, new_head_y] == 6:  # Out of bounds or wall
-            print("Out of bounds or hit wall")
+            asdf = 1
+            # print("Out of bounds or hit wall")
             # TODO: Implement wall collision handling
         else:
             grid[new_head_x, new_head_y] = 4 # New head position
