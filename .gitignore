@@ -100,3 +100,9 @@ ENV/
 
 # Rope project settings
 .ropeproject
+robotaxi/agent/__pycache__/
+robotaxi/gameplay/__pycache__/
+robotaxi/gui/__pycache__/
+robotaxi/utils/__pycache__/
+
+test_*.json

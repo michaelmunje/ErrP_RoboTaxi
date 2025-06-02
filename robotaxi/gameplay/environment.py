@@ -107,10 +107,13 @@ class Environment(object):
         """ Get the number of actions the agent can take. """
         return len(ALL_SNAKE_ACTIONS)
 
-    def new_episode(self):
+    def new_episode(self, seed=None):
         """ Reset the environment and begin a new episode. """
 
-        self.seed(random.randint(12345,99999))
+        if seed is not None:
+            self.seed(seed)
+        else:
+            self.seed(random.randint(12345,99999))
         self.field = Field(level_map=self.initial_config)
         self.field.create_level()
         

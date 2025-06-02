@@ -390,8 +390,12 @@ def preprocess_observation_tamer(grid):
 
     # Check all cells along the current direction until hitting a wall, out of bounds, or target
     def check_encounterments(start_x, start_y, direction):
-        encounter_1 = 0
-        encounter_3 = 0
+        new = False
+        encounter_1 = 10
+        encounter_3 = 10
+        if not new:
+            encounter_1 = 0
+            encounter_3 = 0
         x, y = start_x, start_y
 
         while True:
@@ -414,10 +418,18 @@ def preprocess_observation_tamer(grid):
             if cell == 6:  # Wall
                 break
             elif cell == 1:  # Positive target
-                encounter_1 = 1
+                # encounter_1 = 1
+                # encounter_1 = distance between cell and (start_x, start_y)
+                encounter_1 = abs(x - start_x) + abs(y - start_y)
+                if not new:
+                    encounter_1 = 1
                 break
             elif cell == 3:  # Negative target
-                encounter_3 = 1
+                # encounter_3 = 1
+                # encounter_3 = distance between cell and (start_x, start_y)
+                encounter_3 = abs(x - start_x) + abs(y - start_y)
+                if not new:
+                    encounter_3 = 1
                 break
             # Continue for empty (0), head (4), or body (5) without stopping
 

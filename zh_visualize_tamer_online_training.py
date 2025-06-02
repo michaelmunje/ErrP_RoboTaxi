@@ -1,3 +1,12 @@
+"""
+This script should load a tamer log file, load the weights into an array,
+
+find the weights at every 20 steps, run visualization with the weights, and print the cumulative reward for each weight
+
+
+"""
+
+
 import pygame
 import numpy as np
 import time
@@ -7,45 +16,64 @@ from robotaxi.gameplay.environment import Environment
 from robotaxi.gameplay.entities import CellType, SnakeDirection, SnakeAction, ALL_SNAKE_ACTIONS
 # from robotaxi.agent.ppo_agent import PPOAgent  # Updated import path
 from robotaxi.gameplay.wrappers import SimplifiedObservationWrapper, preprocess_observation
-from robotaxi.agent.tamer_agent import TAMERAgent, OnlineTAMERAgent
+from robotaxi.agent.tamer_agent import TAMERAgent  # Updated import path
+from robotaxi.agent.tamer_agent import OnlineTAMERAgent
 import imageio.v2 as imageio
 
+
+LOG_PATH = "logs/2025-05-13-16-45-48-online-tamer.log" # Zhihan
+LOG_PATH = "logs/2025-05-15-10-29-52-online-tamer.log" # ana
+LOG_PATH = "logs/2025-05-30-10-49-18-online-tamer.log" # Zhihan - May 30 11:05 - positive negative
+LOG_PATH = "logs/2025-05-30-15-33-19-online-tamer-noisy.log" # Zhihan - May 30 16:06 - positive negative - noisy with 60% accuracy
+# LOG_PATH = "logs/2025-05-30-19-10-37-online-tamer-noisy.log" # Zhihan - May 30 16:06 - positive negative - noisy with 60% accuracy - 0.99 decay step size - w1
+# LOG_PATH = "logs/2025-05-30-19-40-00-online-tamer-noisy.log" # Zhihan - May 30 16:06 - positive negative - noisy with 60% accuracy - 0.99 decay step size - w2
+# LOG_PATH = "logs/2025-05-30-10-49-18-oracle-online-tamer.log" # Zhihan - May 30 11:05 - positive negative
+LOG_PATH = "logs/2025-05-30-21-06-47-online-tamer-noisy.log" # Zhihan - May 30 11:05 - positive negative noisy with 60% accuracy - 0.995 decay step size - w2
+
+# LOG_PATH = "logs/2025-05-15-11-16-33-online-tamer.log" # ana2 - negative only
+
+RENDER = False
+
+RESULT_PATH = LOG_PATH.replace(".log", "-cumulative-reward.log")
 
 class PyGameGUI:
     """Simplified Pygame GUI to visualize a trained PPO agent's policy in Robotaxi."""
 
-    FPS_LIMIT = 60
-    TIMESTEP_DELAY = 100  # Milliseconds between steps (adjust for speed)
+    FPS_LIMIT = 6000
+    TIMESTEP_DELAY = 1  # Milliseconds between steps (adjust for speed)
 
     def __init__(self, field_size=8):
-        pygame.init()
+        if RENDER:
+            pygame.init()
         self.field_size = field_size
         self.cell_size = 96 * 8 // self.field_size  # Scale cell size based on 8x8 grid
         self.screen_size = (self.field_size * self.cell_size, self.field_size * self.cell_size)
-        self.screen = pygame.display.set_mode(self.screen_size)
-        self.screen.fill(Colors.SCREEN_BACKGROUND)
-        self.fps_clock = pygame.time.Clock()
+        if RENDER:
+            self.screen = pygame.display.set_mode(self.screen_size)
+            self.screen.fill(Colors.SCREEN_BACKGROUND)
+            self.fps_clock = pygame.time.Clock()
         self.agent = None
         self.env = None
         self.pause = False
         self.timestep_watch = Stopwatch()
 
-        # Load icons (simplified set)
-        self.wall_icon = pygame.transform.scale(pygame.image.load("icon/forest.png"), (self.cell_size, self.cell_size))
-        self.good_fruit_icon = pygame.transform.scale(pygame.image.load("icon/man.png"), (self.cell_size * 2 // 3, self.cell_size * 2 // 3))
-        self.bad_fruit_icon = pygame.transform.scale(pygame.image.load("icon/road_block.png"), (self.cell_size * 2 // 3, self.cell_size * 2 // 3))
-        self.lava_icon = pygame.transform.scale(pygame.image.load("icon/purple_car.png"), (self.cell_size, self.cell_size))
-        self.reward_icon = pygame.transform.scale(pygame.image.load("icon/dollar.png"), (self.cell_size // 3, self.cell_size // 3))
-        
-        # Snake icons (simple car scheme)
-        self.south = pygame.transform.scale(pygame.image.load("icon/auto_bus_south.png"), (self.cell_size, self.cell_size - 5))
-        self.north = pygame.transform.scale(pygame.image.load("icon/auto_bus_north.png"), (self.cell_size, self.cell_size - 5))
-        self.east = pygame.transform.scale(pygame.image.load("icon/auto_bus_east.png"), (self.cell_size, self.cell_size - 5))
-        self.west = pygame.transform.flip(self.east, True, False)
+        if RENDER:
+            # Load icons (simplified set)
+            self.wall_icon = pygame.transform.scale(pygame.image.load("icon/forest.png"), (self.cell_size, self.cell_size))
+            self.good_fruit_icon = pygame.transform.scale(pygame.image.load("icon/man.png"), (self.cell_size * 2 // 3, self.cell_size * 2 // 3))
+            self.bad_fruit_icon = pygame.transform.scale(pygame.image.load("icon/road_block.png"), (self.cell_size * 2 // 3, self.cell_size * 2 // 3))
+            self.lava_icon = pygame.transform.scale(pygame.image.load("icon/purple_car.png"), (self.cell_size, self.cell_size))
+            self.reward_icon = pygame.transform.scale(pygame.image.load("icon/dollar.png"), (self.cell_size // 3, self.cell_size // 3))
+            
+            # Snake icons (simple car scheme)
+            self.south = pygame.transform.scale(pygame.image.load("icon/auto_bus_south.png"), (self.cell_size, self.cell_size - 5))
+            self.north = pygame.transform.scale(pygame.image.load("icon/auto_bus_north.png"), (self.cell_size, self.cell_size - 5))
+            self.east = pygame.transform.scale(pygame.image.load("icon/auto_bus_east.png"), (self.cell_size, self.cell_size - 5))
+            self.west = pygame.transform.flip(self.east, True, False)
 
-        self.text_font = pygame.font.Font("fonts/gyparody_hv.ttf", int(23 * (self.cell_size / 40.0)))
-        self.num_font = pygame.font.Font("fonts/gyparody_tf.ttf", int(36 * (self.cell_size / 40.0)))
-        pygame.display.set_caption('Robotaxi PPO Visualization')
+            self.text_font = pygame.font.Font("fonts/gyparody_hv.ttf", int(23 * (self.cell_size / 40.0)))
+            self.num_font = pygame.font.Font("fonts/gyparody_tf.ttf", int(36 * (self.cell_size / 40.0)))
+            pygame.display.set_caption('Robotaxi PPO Visualization')
 
     def load_environment(self, environment):
         """Load the raw robottaxi environment."""
@@ -138,7 +166,7 @@ class PyGameGUI:
             pygame.display.update()
             self.fps_clock.tick(self.FPS_LIMIT)
 
-    def run(self, num_episodes: int = 1):
+    def run(self, num_episodes: int = 1, seeds: list[int] = []):
         """Visualise the PPO agent and save all episodes to a GIF."""
         MAX_STEPS     = 100      # hard per-episode step cap
         GIF_INTERVAL  = 0.0333333333333333333333333333     # seconds between captured frames
@@ -146,18 +174,21 @@ class PyGameGUI:
 
         self.fps_clock   = pygame.time.Clock()
         last_gif_stamp   = 0.0    # wall-clock time of previous captured frame
+        
+        episode_rewards = []
 
         for episode in range(num_episodes):
-            timestep        = self.env.new_episode()
+            timestep        = self.env.new_episode(seed=seeds[episode])
             self.agent.begin_episode()
-            self.render()
-            pygame.display.update()
+            if RENDER:
+                self.render()
+                pygame.display.update()
 
-            # initial frame
-            gif_frames.append(
-                pygame.surfarray.array3d(pygame.display.get_surface()).swapaxes(0, 1)
-            )
-            last_gif_stamp = time.perf_counter()
+                # initial frame
+                gif_frames.append(
+                    pygame.surfarray.array3d(pygame.display.get_surface()).swapaxes(0, 1)
+                )
+                last_gif_stamp = time.perf_counter()
 
             running         = True
             last_head       = list(self.env.snake.head)
@@ -167,18 +198,19 @@ class PyGameGUI:
             print(f"Episode {episode + 1} started")
 
             while running:
-                # ---------- handle UI / quit  ----------
-                for event in pygame.event.get():
-                    if event.type == pygame.KEYDOWN:
-                        if event.key == pygame.K_SPACE:
-                            self.pause = not self.pause
-                        elif event.key == pygame.K_ESCAPE:
+                if RENDER:
+                    # ---------- handle UI / quit  ----------
+                    for event in pygame.event.get():
+                        if event.type == pygame.KEYDOWN:
+                            if event.key == pygame.K_SPACE:
+                                self.pause = not self.pause
+                            elif event.key == pygame.K_ESCAPE:
+                                running = False
+                        elif event.type == pygame.QUIT:
                             running = False
-                    elif event.type == pygame.QUIT:
-                        running = False
 
-                if self.pause:
-                    continue
+                    if self.pause:
+                        continue
 
                 # ---------- fixed-timestep advance ----------
                 if self.timestep_watch.time() >= self.TIMESTEP_DELAY:
@@ -198,53 +230,65 @@ class PyGameGUI:
 
                     # render + small head-motion animation
                     curr_head = list(self.env.snake.head)
-                    self.transition_animation(
-                        curr_head[0], curr_head[1],
-                        last_head[0], last_head[1],
-                        timestep.reward
-                    )
+                    if RENDER:
+                        self.transition_animation(
+                            curr_head[0], curr_head[1],
+                            last_head[0], last_head[1],
+                            timestep.reward
+                        )
                     last_head = curr_head
 
                     # ---------- GIF capture (≤ 10 fps) ----------
-                    now = time.perf_counter()
-                    if now - last_gif_stamp >= GIF_INTERVAL:
-                        gif_frames.append(
-                            pygame.surfarray.array3d(
-                                pygame.display.get_surface()
-                            ).swapaxes(0, 1)
-                        )
-                        last_gif_stamp = now
+                    if RENDER:
+                        now = time.perf_counter()
+                        if now - last_gif_stamp >= GIF_INTERVAL:
+                            gif_frames.append(
+                                pygame.surfarray.array3d(
+                                    pygame.display.get_surface()
+                                ).swapaxes(0, 1)
+                            )
+                            last_gif_stamp = now
 
                     # ---------- termination checks ----------
                     if step_counter >= MAX_STEPS:
                         print(f"Reached step limit ({MAX_STEPS}); ending episode.")
                         running = False
+                        episode_rewards.append(episode_reward)
+                        print(f"episode_rewards: {episode_rewards}")
 
                     if timestep.is_episode_end and running:
-                        self.render()
-                        self.render_scoreboard(
-                            self.env.stats.sum_episode_rewards,
-                            self.env.max_step_limit - self.env.timestep_index
-                        )
-                        pygame.display.update()
+                        if RENDER:
+                            self.render()
+                            self.render_scoreboard(
+                                self.env.stats.sum_episode_rewards,
+                                self.env.max_step_limit - self.env.timestep_index
+                            )
+                            pygame.display.update()
                         print(f"Episode {episode + 1} ended with total reward "
                             f"{episode_reward:.2f}")
+                        episode_rewards.append(episode_reward)
+                        print(f"episode_rewards: {episode_rewards}")
                         time.sleep(1)
                         running = False
-
-                pygame.display.update()
-                self.fps_clock.tick(self.FPS_LIMIT)
+                if RENDER:
+                    pygame.display.update()
+                    self.fps_clock.tick(self.FPS_LIMIT)
 
         pygame.quit()
         
         
 
         # ---------- write GIF ----------
-        if gif_frames:
-            imageio.mimsave("snake_episodes.gif", gif_frames, duration=150)   # 1 / 0.10 s
-            print("✅  Saved all episodes to snake_episodes.gif")
+        # if gif_frames:
+        #     # Add date timestamp to the filename
+        #     from datetime import datetime
+        #     timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+        #     imageio.mimsave(f"snake_episodes_{timestamp}.gif", gif_frames, duration=150)   # 1 / 0.10 s
+        #     print("✅  Saved all episodes to snake_episodes.gif")
         
-        return episode_reward
+        print(f"episode_rewards: {episode_rewards}")
+        
+        return np.mean(episode_rewards), np.var(episode_rewards), episode_rewards
 
 
 
@@ -263,6 +307,18 @@ class Colors:
 
 # Main execution
 if __name__ == '__main__':
+    
+    # get arguments that right after the py file
+    import sys
+    args = sys.argv[1:]
+    print(f"Arguments: {args}")
+    # it could either be 1 or 0, if 1, overwrite the LOG_PATH
+    if len(args) > 0:
+        LOG_PATH = args[0]
+        RESULT_PATH = LOG_PATH.replace(".log", "-cumulative-reward.log")
+        print(f"working on {LOG_PATH}, result will be saved to {RESULT_PATH}")
+        
+    
     # Load the raw environment
     config_filename = "./robotaxi/levels/8x8-blank.json"
     with open(config_filename) as cfg:
@@ -271,6 +327,71 @@ if __name__ == '__main__':
     np.random.seed(0)
     random.seed(0)
     env = Environment(config=env_config, verbose=1)
+    
+    # load the log file
+    with open(LOG_PATH, "r") as f:
+        lines = f.readlines()
+        
+    # load all weights into an array
+    weights = []
+    for line in lines:
+        if "[WEIGHT]" in line:
+            try:
+                # Extract the weight values between square brackets
+                weight_str = line.split("self.w: [")[1].split("]")[0].strip()
+                # Try comma-separated first, if that fails try space-separated
+                try:
+                    weight_values = [float(x.strip()) for x in weight_str.split(',')]
+                except ValueError:
+                    weight_values = [float(x.strip()) for x in weight_str.split()]
+                
+                if len(weight_values) != 6:  # Verify we have exactly 6 weights
+                    print(f"Warning: Expected 6 weights, got {len(weight_values)} in line: {line}")
+                    continue
+                weights.append(weight_values)
+            except Exception as e:
+                print(f"Error parsing line: {line}")
+                print(f"Error details: {str(e)}")
+                continue
+    
+    if not weights:
+        raise ValueError("No valid weights found in the log file")
+        
+    # Convert to numpy array and verify shape
+    weights = np.array(weights, dtype=float)
+    print(f"Loaded {len(weights)} weight vectors")
+    print(f"Weight shape: {weights.shape}")
+    print("First few weights:", weights[:5])
+    
+    # find the weights at every 20 steps
+    weights_at_steps = []
+    # user inputted interventions + noisy interventions
+    second = [0,17,34,52,69,100,127,153,178,200,237,249,265,296,335,347,376,390,402,420,440,462]
+    # user inputted interventions
+    first = [i for i in range(0, len(second)*20, 20)]
+    # for i in range(len(first)):
+    #     weights_at_steps.append( (first[i], weights[second[i]]) )
+    
+    for i in range(0, len(weights), 20):
+        weights_at_steps.append( (i,weights[i]) )
+    # weights_at_steps.append( (len(weights), weights[-1]) )
+    
+    # run visualization with the weights
+    num_episodes = 10
+    seeds = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19]
+    for i, w in weights_at_steps:
+        # agent = TAMERAgent(w=w)
+        agent = OnlineTAMERAgent(w=w)
+        agent.no_update = True
+        agent.mode = "test"
+        gui = PyGameGUI(field_size=8)
+        gui.load_environment(env)
+        gui.load_agent(agent)
+        cumulative_reward, variance, episode_rewards = gui.run(num_episodes=num_episodes, seeds=seeds)
+        print(f"step {i}, weight: {w}, cumulative reward per episode: {cumulative_reward}")
+        # write this message back to a file 
+        with open(RESULT_PATH, "a") as f:
+            f.write(f"step {i}, weight: {w}, cumulative reward per episode: {cumulative_reward}, num_episodes: {num_episodes}, variance: {variance}, episode_rewards: {episode_rewards}\n")
 
     # # Load the tamer
     # weight_path = "tamer_weights.npy"
@@ -341,48 +462,23 @@ if __name__ == '__main__':
     # w = np.array([-0.1, 0, -0.3, 0.1, 0.5, -0.5])
     
     # # passenger, # car, distance_to_passenger, distance_to_car, facing_passenger, facing_car
-    w = np.array([-1.08813584,  0.90811553,  0.7385555,   0.41252044,  0.17096985, -0.28861487])
-    w = np.array([-5, 5, -0.1, 0.1, 0.5, -0.5])
-    # w = np.array([-0.58192452,  0.47473624,  -0.21560082,  0.21663831,  0, 0])
-    # -0.58192452  0.47473624  0.21560082  0.21663831  0.          0.        ]
-    #[-0.42369461  0.45753083 -0.05217637 -0.01274844  0.12065004 -0.05190085]
-    w = np.array([-0.42369461,  0.45753083, -0.05217637, -0.01274844,  0.12065004, -0.05190085])
-    # [WEIGHT] self.w: [-0.42369461  0.45753083 -0.02872145 -0.02056675  0.14410496 -0.05190085]
-    
-    
-    # [-0.68437645  1.60577195 -0.05572408  0.05546075  0.30822717 -0.18552597]
-    # From 60% random + 40% oracle feedback
-    w = np.array([-0.68437645,  1.60577195, -0.05572408,  0.05546075,  0.30822717, -0.18552597])
-    
-    
-    # Ana 50%
-    # [-0.71991968  0.35304181  0.03644306 -0.09950297 -0.12269481  0.14630814]
-    w = np.array([-0.71991968,  0.35304181,  0.03644306, -0.09950297, -0.12269481,  0.14630814])
-    
-    
-    # only negative feedback
-    # [-0.55351445  1.77119911 -0.25042856  0.17100905  0.76291819 -0.3277517 ]
-    w = np.array([-0.55351445,  1.77119911, -0.25042856,  0.17100905,  0.76291819, -0.3277517 ])
-    
-    # negative 1e4
-    # [-0.12790765  0.89140574 -0.39404347  0.00465401  0.480666   -0.41044899]
-    w = np.array([-0.12790765,  0.89140574, -0.39404347,  0.00465401,  0.480666,   -0.41044899])
+    # w = np.array([-1.08813584,  0.90811553,  0.7385555,   0.41252044,  0.17096985, -0.28861487])
+    # w = np.array([-5, 5, -0.1, 0.1, 0.5, -0.5])
+    # # w = np.array([-0.58192452,  0.47473624,  -0.21560082,  0.21663831,  0, 0])
+    # # -0.58192452  0.47473624  0.21560082  0.21663831  0.          0.        ]
     # agent = TAMERAgent(w=w)
     
-    w = np.array([-5, 5, -0.1, 0.1, 0.5, -0.5])
-    agent = OnlineTAMERAgent(w=w)
-    agent.no_update = True
-    agent.mode = "test"
+    # # trained
+    # # agent = TAMERAgent()
+    # # agent = PPOAgent(model_path="ppo_robottaxi_simple.zip", feature_extractor=preprocess_observation)
+
+    # # Initialize GUI
+    # gui = PyGameGUI(field_size=8)
+    # gui.load_environment(env)
+    # gui.load_agent(agent)
+
+    # # Run visualization
+    # gui.run(num_episodes=3)  # Visualize 3 episodes
     
     
-    # trained
-    # agent = TAMERAgent()
-    # agent = PPOAgent(model_path="ppo_robottaxi_simple.zip", feature_extractor=preprocess_observation)
-
-    # Initialize GUI
-    gui = PyGameGUI(field_size=8)
-    gui.load_environment(env)
-    gui.load_agent(agent)
-
-    # Run visualization
-    gui.run(num_episodes=3)  # Visualize 3 episodes
+    print(f"DONE, working on {LOG_PATH}, result saved to {RESULT_PATH}")

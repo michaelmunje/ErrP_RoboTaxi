@@ -8,6 +8,14 @@ from robotaxi.agent.tamer_agent import TAMERAgent
 from robotaxi.gameplay.entities import CellType, SnakeDirection, SnakeAction, ALL_SNAKE_ACTIONS
 from robotaxi.gameplay.wrappers import preprocess_observation_tamer
 
+"""
+
+This file trains a TAMER agent with 60% accurate feedback from a oracle per-step feedback giver 
+Which is different from a true human feedback giver, because human feedback could be more sparse,
+
+"""
+
+
 # TAMER Agent Parameters
 
 # w = np.zeros(6)  # Weight vector for 14-feature vector from preprocess_observation
@@ -17,7 +25,8 @@ w = np.random.uniform(-1, 1, 6)
 # w[1] = 0
 # w = np.array([-5, 5, -0.1, 0.1, 0.5, -0.5]) # oracle
 alpha = 0.01    # Learning rate
-max_steps = int(1e4)  # Maximum training steps (adjust as needed)
+max_steps = int(1e4)  # Maximum training steps (adjust as needed) when 10% feedback is random
+max_steps = int(1e5)  # Maximum training steps (adjust as needed) when 60% feedback is random
 # max_steps = int(25)  # Maximum training steps (adjust as needed)
 
 # History queues for delayed feedback (s_{t-2}, s_{t-1}, s_t), etc.
@@ -66,7 +75,8 @@ def gen_proxy_evaluator(w):
         # return np.dot(w, delta_f)
         
         # there is a 10% chance the feedback is ramdon from 1,-1,0
-        if np.random.rand() < 0.1:
+        # there is a 60% chance the feedback is ramdon from 1,-1,0
+        if np.random.rand() < 0.6:
             return np.random.choice([-1, 0, 1])
         if np.dot(w, delta_f) > 1e-4:
             return 1
@@ -146,9 +156,6 @@ for t in range(max_steps):
     # Choose and execute action
     print(f"============Step {t+1}/{max_steps}============\n")
     a_t = choose_action(s_t, w, env)
-    
-    # epsilon optimal
-    
     
     pred_f_next = get_feature_vector_tamer(simulate_transition(s_t, a_t))
     a_history.append(a_t)

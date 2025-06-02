@@ -30,3 +30,69 @@ For the TAMER pipeline, use:
 
 ### Optional  
 - Investigate the game's target spawn implementations.  
+
+
+
+# Notes on running the experiments
+
+# For running without Arduino and with Controller, use
+DEBUG_MODE=1 CONTROLLER=XBOX python record_feedback.py
+
+# For running without Arduino and without Controller, use
+DEBUG_MODE=1 python record_feedback.py
+DEBUG_MODE=1 python record_feedback_online_tamer.py --agent=tamer-online --num-episodes=3
+
+# For running with Arduino and without Controller
+# (mouse clicking + -  always works), use
+python record_feedback.py
+
+# For running with Arduino and with Controller, use
+CONTROLLER=XBOX python record_feedback.py
+
+
+
+
+
+trained online tamer 2 inputs
+-1.08813584  0.90811553  0.7385555   0.41252044  0.17096985 -0.28861487
+
+
+DEBUG_MODE=1 python record_feedback_online_tamer.py --agent=tamer-online --num-episodes=3
+DEBUG_MODE=1 python record_feedback_online_tamer_noisy.py --agent=tamer-online-noisy --num-episodes=15
+
+
+Updated on June 2, 2025
+
+
+RUNNING EXPERIMENTS
+
+# To run online tamer with noisy feedback - Note:
+# The key presses from the controller will be reported honestly to the logger as well as as a trigger to the EEG interface.
+# The only noisy part is that the online learning agent (the agent that controls the taxi) will update its weights with a 60% accuracy on top of the true feedback.
+# If we want to run the experiment with negative feedback only, set the flag --negative-feedback-only.
+
+DEBUG_MODE=1 python record_feedback_online_tamer_noisy.py --agent tamer-online-noisy --lr 0.01 --lr-decay 0.998 --epsilon-train 0.2 --epsilon-test 0.1 --weight w1 --num-episodes 3 --negative-feedback-only --feedback-accuracy 0.0 
+
+important notes:
+change --weight w1 to --weight w2 to run the experiment with w2 weights (a lower performing initialization)
+change --num-episodes to any number you want
+remove --negative-feedback-only to run the experiment with positive + negative feedback
+set --feedback-accuracy to any number you want, typically 0.6, if you want non-noisy feedback, set it to 1.0
+if any issue arrises, shoot zhihan an email.
+
+
+
+VISUALIZING EXPERIMENTS
+
+after each experiment, the log file will be saved in the logs folder.. for example logs/2025-06-02-11-29-03-online-tamer-noisy.log
+
+then, run python zh_visualize_tamer_online_training.py <your_log_file_path> , for example:
+python zh_visualize_tamer_online_training.py logs/2025-06-02-11-29-03-online-tamer-noisy.log
+this will generate another log file in the logs folder.. for example logs/2025-06-02-11-29-03-online-tamer-noisy-cumulative-reward.log
+
+then, plot the cumulative reward curve with:
+python analysis/analysis_weight_learning_progress.py logs/2025-06-02-11-29-03-online-tamer-noisy-cumulative-reward.log
+
+
+EXPERIMENT LOGGING
+detailed logs including true user feedback and noisy user feedback are saved in the logs folder.
