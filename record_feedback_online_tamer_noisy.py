@@ -141,20 +141,30 @@ def parse_command_line_args(args):
     parser.add_argument(
         '--weight',
         type=str,
-        default='w1',
+        required=True,
         help='The weight of the agent.'
     )
     
     parsed_args = parser.parse_args(args)
     
     # Convert seeds string to list of integers
-    if parsed_args.seeds:
+    # if parsed_args.seeds start with "trial", the map it to some predefined seeds
+    if isinstance(parsed_args.seeds, str) and parsed_args.seeds.startswith("trial"):
+        # if it is trial 1, seeds are 1,2,3,4,5,6,7,8,9,10
+        # if it is trial 2, seeds are 11,12,13,14,15,16,17,18,19,20
+        # ...
+        trial_num = int(parsed_args.seeds.split('trial')[1])
+        parsed_args.seeds = [(trial_num-1) * 10 + i for i in range(1, 11)]
+        # example: trial1 -> 1,2,3,4,5,6,7,8,9,10, trial2 -> 11,12,13,14,15,16,17,18,19,20, ...
+    elif isinstance(parsed_args.seeds, str):
         try:
             parsed_args.seeds = [int(seed.strip()) for seed in parsed_args.seeds.split(',') if seed.strip()]
         except ValueError:
-            raise ValueError("Seeds must be a comma-separated list of integers")
+            raise ValueError("Seeds must be a comma-separated list of integers or trial1, trial2, trial3, trial4, trial5, trial6")
     else:
         parsed_args.seeds = []
+    
+    print(f"parsed_args.seeds: {parsed_args.seeds}")
     
     return parsed_args
 
@@ -205,7 +215,7 @@ def create_agent(name, model, dimension, env, reward_mapping=None, **kwargs):
         lr_decay = kwargs.get('lr_decay', 0.998)
         epsilon_train = kwargs.get('epsilon_train', 0.2)
         epsilon_test = kwargs.get('epsilon_test', 0.1)
-        weight = kwargs.get('weight', 'w1')
+        weight = kwargs.get('weight')
         return OnlineNoisyTAMERAgent(w=weight, feedback_accuracy=feedback_accuracy, negative_feedback_only=negative_feedback_only, alpha=lr, lr_decay=lr_decay, epsilon_train=epsilon_train, epsilon_test=epsilon_test)
 
         # Example command to run the agent:
@@ -332,6 +342,7 @@ def main():
             'lr_decay': parsed_args.lr_decay,
             'epsilon_train': parsed_args.epsilon_train,
             'epsilon_test': parsed_args.epsilon_test,
+            'weight': parsed_args.weight,
         }
     else:
         kwargs = {}

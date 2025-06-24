@@ -212,7 +212,9 @@ class OnlineTAMERAgent(TAMERAgent):
         if isinstance(w, str):
             # if the string is one of w1, w2, map it to the corresponding w
             if w in w_map:
-                w = w_map[w]
+                w_key = w
+                w = w_map[w_key]
+                print(f"using predefined {w_key} initialized to {w}")
                 # now w is a numpy array
             
             # try to parse str to an array with 6 elements

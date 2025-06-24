@@ -9,3 +9,10 @@ scikit-image
 scikit-learn
 seaborn
 pillow
+torch
+stable-baselines3
+gymnasium
+keras
+tqdm
+imageio
+scipy

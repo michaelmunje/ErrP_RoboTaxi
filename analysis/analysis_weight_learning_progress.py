@@ -96,7 +96,7 @@ def main(log_file_path=None):
     for i in range(weights.shape[1]):
         axs[1].plot(steps, weights[:, i], marker='o', label=weight_labels[i])
     axs[1].set_title("Weight Dimension Trends Over Intervention")
-    axs[1].set_xlabel("# Negative + Positive Intervention")
+    axs[1].set_xlabel("# Negative Intervention")
     axs[1].set_ylabel("Weight Value")
     axs[1].legend()
     axs[1].grid(True)

@@ -372,7 +372,8 @@ if __name__ == '__main__':
     # for i in range(len(first)):
     #     weights_at_steps.append( (first[i], weights[second[i]]) )
     
-    for i in range(0, len(weights), 20):
+    # plot every 2 steps
+    for i in range(0, len(weights), 2):
         weights_at_steps.append( (i,weights[i]) )
     # weights_at_steps.append( (len(weights), weights[-1]) )
     

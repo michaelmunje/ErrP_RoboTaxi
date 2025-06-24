@@ -71,7 +71,9 @@ RUNNING EXPERIMENTS
 # The only noisy part is that the online learning agent (the agent that controls the taxi) will update its weights with a 60% accuracy on top of the true feedback.
 # If we want to run the experiment with negative feedback only, set the flag --negative-feedback-only.
 
-DEBUG_MODE=1 python record_feedback_online_tamer_noisy.py --agent tamer-online-noisy --lr 0.01 --lr-decay 0.998 --epsilon-train 0.2 --epsilon-test 0.1 --weight w1 --num-episodes 3 --negative-feedback-only --feedback-accuracy 0.0 
+DEBUG_MODE=1 python record_feedback_online_tamer_noisy.py --agent tamer-online-noisy --lr 0.01 --lr-decay 0.998 --epsilon-train 0.2 --epsilon-test 0.1 --weight w1 --num-episodes 3 --negative-feedback-only --feedback-accuracy 1.0 
+
+# to use trial specific seeds, use --seeds trial1, trial2, trial3, trial4, trial5, trial6
 
 important notes:
 change --weight w1 to --weight w2 to run the experiment with w2 weights (a lower performing initialization)
@@ -96,3 +98,37 @@ python analysis/analysis_weight_learning_progress.py logs/2025-06-02-11-29-03-on
 
 EXPERIMENT LOGGING
 detailed logs including true user feedback and noisy user feedback are saved in the logs folder.
+
+python zh_visualize_tamer_online_training.py phase2-selected/subject1/robotaxilog/2025-06-17-13-46-15-online-tamer-noisy.log
+phase2-selected/subject1/robotaxilog/2025-06-17-13-46-15-online-tamer-noisy.log
+
+python analysis/analysis_weight_learning_progress.py phase2-selected/subject1/robotaxilog/2025-06-17-13-46-15-online-tamer-noisy-cumulative-reward.log
+
+
+
+python zh_visualize_tamer_online_training.py phase2-selected/subject1/robotaxilog/2025-06-17-13-46-15-online-tamer-noisy.log
+python zh_visualize_tamer_online_training.py phase2-selected/subject1/robotaxilog/2025-06-17-14-01-03-online-tamer-noisy.log
+python zh_visualize_tamer_online_training.py phase2-selected/subject1/robotaxilog/2025-06-17-14-11-34-online-tamer-noisy.log
+python zh_visualize_tamer_online_training.py phase2-selected/subject1/robotaxilog/2025-06-17-14-21-28-online-tamer-noisy.log
+
+python zh_visualize_tamer_online_training.py phase2-selected/subject2/robotaxilog/2025-06-17-16-44-33-online-tamer-noisy.log
+python zh_visualize_tamer_online_training.py phase2-selected/subject2/robotaxilog/2025-06-17-16-54-09-online-tamer-noisy.log
+python zh_visualize_tamer_online_training.py phase2-selected/subject2/robotaxilog/2025-06-17-17-03-35-online-tamer-noisy.log
+python zh_visualize_tamer_online_training.py phase2-selected/subject2/robotaxilog/2025-06-17-17-12-29-online-tamer-noisy.log
+python zh_visualize_tamer_online_training.py phase2-selected/subject2/robotaxilog/2025-06-17-17-23-10-online-tamer-noisy.log
+
+python analysis/analysis_weight_learning_progress.py phase2-selected/subject1/robotaxilog/2025-06-17-13-46-15-online-tamer-noisy-cumulative-reward.log
+python analysis/analysis_weight_learning_progress.py phase2-selected/subject1/robotaxilog/2025-06-17-14-01-03-online-tamer-noisy-cumulative-reward.log
+python analysis/analysis_weight_learning_progress.py phase2-selected/subject1/robotaxilog/2025-06-17-14-11-34-online-tamer-noisy-cumulative-reward.log
+python analysis/analysis_weight_learning_progress.py phase2-selected/subject1/robotaxilog/2025-06-17-14-21-28-online-tamer-noisy-cumulative-reward.log
+
+python analysis/analysis_weight_learning_progress.py phase2-selected/subject2/robotaxilog/2025-06-17-16-44-33-online-tamer-noisy-cumulative-reward.log
+python analysis/analysis_weight_learning_progress.py phase2-selected/subject2/robotaxilog/2025-06-17-16-54-09-online-tamer-noisy-cumulative-reward.log
+python analysis/analysis_weight_learning_progress.py phase2-selected/subject2/robotaxilog/2025-06-17-17-03-35-online-tamer-noisy-cumulative-reward.log
+python analysis/analysis_weight_learning_progress.py phase2-selected/subject2/robotaxilog/2025-06-17-17-12-29-online-tamer-noisy-cumulative-reward.log
+python analysis/analysis_weight_learning_progress.py phase2-selected/subject2/robotaxilog/2025-06-17-17-23-10-online-tamer-noisy-cumulative-reward.log
+
+2025-06-17-13-46-15-online-tamer-noisy.log
+2025-06-17-14-01-03-online-tamer-noisy.log
+2025-06-17-14-11-34-online-tamer-noisy.log
+2025-06-17-14-21-28-online-tamer-noisy.log
