@@ -66,8 +66,8 @@ class PyGameGUI:
     """ Provides a Snake GUI powered by Pygame. """
 
     FPS_LIMIT = 60
-    AI_TIMESTEP_DELAY = 5000
-    HUMAN_TIMESTEP_DELAY = 5000
+    AI_TIMESTEP_DELAY = 3000
+    HUMAN_TIMESTEP_DELAY = 3000
 
     SNAKE_CONTROL_KEYS = [
         pygame.K_UP,
@@ -165,7 +165,7 @@ class PyGameGUI:
             self.parallel = Trigger('FAKE')
         else:
             self.parallel = Trigger('ARDUINO')
-        self.parallel.init(50)
+        self.parallel.init(10)
     def set_icon_scheme(self, idx):
         scheme = self.car_schemes[idx]
         self.south = pygame.transform.scale(pygame.image.load("icon/"+scheme+"_south.png"),(self.CELL_SIZE, self.CELL_SIZE-5))
@@ -933,7 +933,7 @@ class PyGameGUI:
                 # ADD ErrP trigger here
                 # VEHICLE STARTED TO MOVE...
                 # parallel.signal(100)
-                self.parallel.signal(100)
+                self.parallel.signal(2)
            
                 print(1)
                 
@@ -1047,13 +1047,13 @@ class PyGameGUI:
                             if flag_reward_minus:
                                 feedback_log.append({"time": time.time(), "reward": -1})
                                 minus_button_pressed = True  # Set pressed state
-                                self.parallel.signal(103)
+                                self.parallel.signal(3)
                                 print(3)
                                 
                             if flag_reward_plus:
                                 feedback_log.append({"time": time.time(), "reward": +1})
                                 plus_button_pressed = True  # Set pressed state
-                                self.parallel.signal(102)
+                                self.parallel.signal(4)
                                 print(2)
                         
                         if event.type == pygame.MOUSEBUTTONUP or event.type == pygame.JOYBUTTONUP:

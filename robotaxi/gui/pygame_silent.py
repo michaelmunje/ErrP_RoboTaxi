@@ -1,4 +1,5 @@
 import numpy as np
+from cnbiloop import BCI_tid
 import pygame
 import time
 import random
@@ -8,6 +9,7 @@ import json
 import threading
 import logging
 import sys
+import queue
 
 from robotaxi.agent import HumanAgent
 from robotaxi.gameplay.entities import (CellType, SnakeAction, SnakeDirection, ALL_SNAKE_DIRECTIONS, ALL_SNAKE_ACTIONS, SNAKE_GROW, WALL_WARP, Point)
@@ -59,16 +61,64 @@ class captureThread(threading.Thread):
 
     def stopped(self):
         return self._stop_event.is_set()
+
+class TiDReceiver(threading.Thread):
+    """
+    Continuously reads TiD messages and pushes parsed events into a queue.
+    Produces tuples: (tmpmsg:int, t:float)
+    """
+    def __init__(self, bci, out_queue):
+        super().__init__(daemon=True)
+        self.bci = bci
+        self.out_queue = out_queue
+        self._stop = threading.Event()
+        # Make the socket responsive; thread-safe even if blocking
+        try:
+            self.bci.iDsock_bus.settimeout(0.05)  # 50 ms
+        except Exception:
+            pass
+
+    def stop(self):
+        self._stop.set()
+
+    def run(self):
+        # non-blocking/continuous thread
+        while not self._stop.is_set():
+            data = None
+            try:
+                data = self.bci.iDsock_bus.recv(512).decode("utf-8")
+                self.bci.idStreamer_bus.Append(data)
+            except Exception:
+                # timeout or no data; short nap to avoid hot-spinning
+                time.sleep(0.005)
+                continue
+
+            if not data:
+                continue
+
+            # Drain all complete <tobiid .../> packets that arrived in this chunk
+            while self.bci.idStreamer_bus.Has("<tobiid", "/>"):
+                msg = self.bci.idStreamer_bus.Extract("<tobiid", "/>")
+                self.bci.id_serializer_bus.Deserialize(msg)
+                tmpmsg = int(round(float(self.bci.id_msg_bus.GetEvent())))
+                # Push only the class events we care about (1/2, but keep general)
+                if tmpmsg in (1, 2):
+                    self.out_queue.put((tmpmsg, time.time()))
+
+            # Discard any tcstatus noise if present
+            while self.bci.idStreamer_bus.Has("<tcstatus", "/>"):
+                _ = self.bci.idStreamer_bus.Extract("<tcstatus", "/>")
+
         
 class PyGameGUI:
     """ Provides a Snake GUI powered by Pygame. """
 
     FPS_LIMIT = 60
     AI_TIMESTEP_DELAY = 5000
-    AI_TIMESTEP_DELAY = 1000
+    AI_TIMESTEP_DELAY = 2000
     # AI_TIMESTEP_DELAY = 300
     HUMAN_TIMESTEP_DELAY = 5000
-    HUMAN_TIMESTEP_DELAY = 1000
+    HUMAN_TIMESTEP_DELAY = 2000
 
     SNAKE_CONTROL_KEYS = [
         pygame.K_UP,
@@ -77,7 +127,7 @@ class PyGameGUI:
         pygame.K_RIGHT
     ]
 
-    def __init__(self, save_frames=False, field_size=8, test=False, random_seeds=None):
+    def __init__(self, save_frames=False, field_size=8, test=False, random_seeds=None, calibration=False, BCI=False):
         self.random_seeds = random_seeds or []
         pygame.init()
 
@@ -152,6 +202,20 @@ class PyGameGUI:
         self.num_font = pygame.font.Font("fonts/gyparody_tf.ttf", int(36*(self.CELL_SIZE/40.0))) 
         self.marker_font = pygame.font.Font("fonts/OpenSans-Bold.ttf", int(12*(self.CELL_SIZE/40.0)))
         pygame.display.set_caption('Robotaxi')
+        scheme = 'bulldozer'
+        if BCI: # decoding
+            print("BCI arguments parsed")
+            self.isLoop=True
+            self.bci = BCI_tid.BciInterface()
+        else: # calibration
+            self.isLoop=False
+            self.bci = None
+
+        self.tid_queue = queue.Queue()
+        self.tid_thread = None
+        if self.isLoop and self.bci is not None:
+            self.tid_thread = TiDReceiver(self.bci, self.tid_queue)
+            self.tid_thread.start()
 
         DEBUG_MODE = int(os.getenv("DEBUG_MODE", "0"))
         if DEBUG_MODE:
@@ -159,6 +223,53 @@ class PyGameGUI:
         else:
             self.parallel = Trigger('ARDUINO')
         self.parallel.init(50)
+
+    def sendTiD(self, value):
+        self.bci.id_msg_bus.SetEvent(value)
+        self.bci.iDsock_bus.sendall(str.encode(self.bci.id_serializer_bus.Serialize()))
+    
+    # def receiveTiD(self):
+    #     """Exact same pattern as 1D cursor"""
+    #     if not self.isLoop:
+    #         return None
+            
+    #     data = None
+    #     try:
+    #         data = self.bci.iDsock_bus.recv(512).decode("utf-8")
+    #         self.bci.idStreamer_bus.Append(data)
+    #     except:
+    #         return None
+        
+    #     # deserialize ID message
+    #     if (data):
+    #         if (self.bci.idStreamer_bus.Has("<tobiid", "/>")):
+    #             msg = self.bci.idStreamer_bus.Extract("<tobiid", "/>")
+    #             self.bci.id_serializer_bus.Deserialize(msg)
+    #             self.bci.idStreamer_bus.Clear()
+    #             tmpmsg = int(round(float(self.bci.id_msg_bus.GetEvent())))
+                
+    #             print("Received MATLAB Classification: ", tmpmsg)
+                
+    #             if (tmpmsg == 1):
+    #                 print('MATLAB: Correct Detected')
+    #                 return 1
+    #             elif (tmpmsg == 2):
+    #                 print('MATLAB: Error Detected')
+    #                 return 2
+    #     return None
+
+    def drain_tid_events(self):
+        """
+        Pull all pending TiD events from the queue and return the list.
+        Each item is (tmpmsg:int, t:float).
+        """
+        events = []
+        try:
+            while True:
+                events.append(self.tid_queue.get_nowait())
+        except queue.Empty:
+            pass
+        return events
 
     def set_icon_scheme(self, idx):
         scheme = self.car_schemes[idx]
@@ -582,12 +693,20 @@ class PyGameGUI:
         return np.roll(actions, -key_idx)[direction_idx]
 
     def quit_game(self):
+        if self.bci is not None:  # Only send if BCI is active
+            self.sendTiD(20) # signal end of run
         self.env.is_game_over = True
         if self.env.verbose >= 1:
             stats_csv_line = self.env.stats.to_dataframe().to_csv(header=False, index=None)
             print(stats_csv_line, file=self.env.stats_file, end='', flush=True)
         if self.env.verbose >= 2:
             print(self.env.stats, file=self.env.debug_file)
+        if getattr(self, "tid_thread", None):
+            try:
+                self.tid_thread.stop()
+                self.tid_thread.join(timeout=0.5)
+            except Exception:
+                pass
         raise QuitRequestedError
 
     def handle_pause(self):
@@ -768,6 +887,20 @@ class PyGameGUI:
                     minus_button_pressed = False
                     plus_button_pressed = False
             self.handle_pause()
+            if collect_feedback and self.isLoop:
+                for (tmpmsg, tstamp) in self.drain_tid_events():
+                    # Map classification -> feedback
+                    if tmpmsg == 2:   # Error detected
+                        print("Received MATLAB Classification:", tmpmsg, "(Error)")
+                        feedback_log.append({"time": tstamp, "reward": -1})
+                        # hardware trigger label
+                        self.parallel.signal(104)
+                        print(3)
+                    elif tmpmsg == 1:
+                        print("Received MATLAB Classification:", tmpmsg, "(Correct)")
+                        # ignore no error detected case
+                        pass
+                    
             if self.frame_num == 0 and PLAY_SOUND:
                 pass  # No sound to play
             if self.last_head == [0,0]:
@@ -874,6 +1007,8 @@ class PyGameGUI:
                     pygame.display.update()
                     time.sleep(2)
                     self.agent.end_episode()
+                    if self.bci is not None:
+                        self.sendTiD(20)  # signal end of run
                     running = False
                 if self.collaborating_agent is not None and timestep_result_collaborator.is_episode_end:
                     smaller_text_font = pygame.font.Font("fonts/gyparody_hv.ttf", int(36*(self.CELL_SIZE/40.0))) 
@@ -882,6 +1017,8 @@ class PyGameGUI:
                     pygame.display.update()
                     time.sleep(2)
                     self.agent.end_episode()
+                    if self.bci is not None:
+                        self.sendTiD(20)  # signal end of run
                     running = False
             if running:  
                 self.render()
@@ -934,16 +1071,26 @@ class PyGameGUI:
                             if event.type == pygame.KEYDOWN:
                                 flag_reward_minus |= (event.key == pygame.K_MINUS) # This is working
                                 flag_reward_plus  |= (event.key == pygame.K_EQUALS) # Using K_EQUALS for the plus key
-                                
+                            # if we're in classification mode    
+                            if self.isLoop:    
+                                for (tmpmsg, tstamp) in self.drain_tid_events():
+                                    if tmpmsg == 2:
+                                        feedback_log.append({"time": tstamp, "reward": -1})
+                                        minus_button_pressed = True
+                                        self.parallel.signal(104)
+                                        print(3)
+                                    elif tmpmsg == 1:
+                                        pass    
+                               
                             if flag_reward_minus:
                                 feedback_log.append({"time": time.time(), "reward": -1})
                                 minus_button_pressed = True
-                                self.parallel.signal(103)
+                                self.parallel.signal(104)
                                 print(3)
                             if flag_reward_plus:
                                 feedback_log.append({"time": time.time(), "reward": +1})
                                 plus_button_pressed = True
-                                self.parallel.signal(102)
+                                self.parallel.signal(108)
                                 print(2)
                         if event.type == pygame.MOUSEBUTTONUP or event.type == pygame.JOYBUTTONUP:
                             minus_button_pressed = False
