@@ -202,6 +202,12 @@ class PyGameGUI:
         self.num_font = pygame.font.Font("fonts/gyparody_tf.ttf", int(36*(self.CELL_SIZE/40.0))) 
         self.marker_font = pygame.font.Font("fonts/OpenSans-Bold.ttf", int(12*(self.CELL_SIZE/40.0)))
         pygame.display.set_caption('Robotaxi')
+        
+        
+        self._minus_visual_until = 0.0
+        self._plus_visual_until  = 0.0
+        self.button_pulse_ms     = int(os.getenv("BUTTON_PULSE_MS", "150"))
+        
         scheme = 'bulldozer'
         if BCI: # decoding
             print("BCI arguments parsed")
@@ -258,6 +264,15 @@ class PyGameGUI:
     #                 return 2
     #     return None
 
+    def pulse_button(self, which, ms=None):
+        dur = (ms or self.button_pulse_ms) / 1000.0
+        until = time.time() + dur
+        if which == 'minus':
+            self._minus_visual_until = max(self._minus_visual_until, until)
+        elif which == 'plus':
+            self._plus_visual_until  = max(self._plus_visual_until, until)
+
+    
     def drain_tid_events(self):
         """
         Pull all pending TiD events from the queue and return the list.
@@ -772,20 +787,26 @@ class PyGameGUI:
             plus_button_pressed = False
             
         def draw_feedback_buttons():
-            minus_color = (150, 0, 0) if minus_button_pressed else (200, 0, 0)
-            plus_color = (0, 150, 0) if plus_button_pressed else (0, 200, 0)
+            now = time.time()
+            minus_until = getattr(self, "_minus_visual_until", 0.0)
+            plus_until  = getattr(self, "_plus_visual_until",  0.0)
+
+            # pressed if mouse is down OR a pulse is active
+            minus_vis = minus_button_pressed or (now < minus_until)
+            plus_vis  = plus_button_pressed  or (now < plus_until)
+
+            minus_color = (150, 0, 0) if minus_vis else (200, 0, 0)
+            plus_color  = (0, 150, 0)  if plus_vis  else (0, 200, 0)
+
             pygame.draw.rect(self.screen, minus_color, minus_button)
-            pygame.draw.rect(self.screen, plus_color, plus_button)
+            pygame.draw.rect(self.screen, plus_color,  plus_button)
+
             minus_text = feedback_font.render("-", True, (255, 255, 255))
-            plus_text = feedback_font.render("+", True, (255, 255, 255))
-            self.screen.blit(minus_text, (
-                minus_button.centerx - minus_text.get_width() // 2, 
-                minus_button.centery - minus_text.get_height() // 2
-            ))
-            self.screen.blit(plus_text, (
-                plus_button.centerx - plus_text.get_width() // 2, 
-                plus_button.centery - plus_text.get_height() // 2
-            ))
+            plus_text  = feedback_font.render("+", True, (255, 255, 255))
+            self.screen.blit(minus_text, (minus_button.centerx - minus_text.get_width() // 2,
+                                        minus_button.centery - minus_text.get_height() // 2))
+            self.screen.blit(plus_text,  (plus_button.centerx  - plus_text.get_width()  // 2,
+                                        plus_button.centery  - plus_text.get_height()  // 2))
 
         pygame.mouse.set_visible(True)
         global frame_ct
@@ -841,8 +862,14 @@ class PyGameGUI:
                     if event.type == pygame.MOUSEBUTTONDOWN and collect_feedback:
                         if minus_button.collidepoint(event.pos):
                             feedback_log.append({"time": time.time(), "reward": -1})
+                            minus_button_pressed = True
+                            self.pulse_button('minus')
+                            self.parallel.signal(104)
                         elif plus_button.collidepoint(event.pos):
                             feedback_log.append({"time": time.time(), "reward": +1})
+                            plus_button_pressed = True
+                            self.pulse_button('plus')
+                            self.parallel.signal(108)
                     if event.type == pygame.QUIT:
                         raise QuitRequestedError
                 pygame.display.update()          
@@ -880,9 +907,13 @@ class PyGameGUI:
                     if minus_button.collidepoint(event.pos):
                         feedback_log.append({"time": time.time(), "reward": -1})
                         minus_button_pressed = True
+                        self.pulse_button('minus')
+                        self.parallel.signal(104)
                     elif plus_button.collidepoint(event.pos):
                         feedback_log.append({"time": time.time(), "reward": +1})
                         plus_button_pressed = True
+                        self.pulse_button('plus')
+                        self.parallel.signal(108)
                 if event.type == pygame.MOUSEBUTTONUP and collect_feedback:
                     minus_button_pressed = False
                     plus_button_pressed = False
@@ -895,6 +926,8 @@ class PyGameGUI:
                         feedback_log.append({"time": tstamp, "reward": -1})
                         # hardware trigger label
                         self.parallel.signal(104)
+                        # error signal animates the minus button like it was manually clicked
+                        self.pulse_button('minus')                        
                         print(3)
                     elif tmpmsg == 1:
                         print("Received MATLAB Classification:", tmpmsg, "(Correct)")
@@ -1076,9 +1109,10 @@ class PyGameGUI:
                                 for (tmpmsg, tstamp) in self.drain_tid_events():
                                     if tmpmsg == 2:
                                         feedback_log.append({"time": tstamp, "reward": -1})
-                                        minus_button_pressed = True
+                                        # minus_button_pressed = True
                                         self.parallel.signal(104)
                                         print(3)
+                                        self.pulse_button('minus')
                                     elif tmpmsg == 1:
                                         pass    
                                
@@ -1087,11 +1121,13 @@ class PyGameGUI:
                                 minus_button_pressed = True
                                 self.parallel.signal(104)
                                 print(3)
+                                self.pulse_button('minus')
                             if flag_reward_plus:
                                 feedback_log.append({"time": time.time(), "reward": +1})
                                 plus_button_pressed = True
                                 self.parallel.signal(108)
                                 print(2)
+                                self.pulse_button('plus')
                         if event.type == pygame.MOUSEBUTTONUP or event.type == pygame.JOYBUTTONUP:
                             minus_button_pressed = False
                             plus_button_pressed = False
