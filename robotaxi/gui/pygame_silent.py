@@ -65,7 +65,7 @@ class captureThread(threading.Thread):
 class TiDReceiver(threading.Thread):
     """
     Continuously reads TiD messages and pushes parsed events into a queue.
-    Produces tuples: (tmpmsg:int, t:float)
+    Produces tuples: (prob:int, t:float)
     """
     def __init__(self, bci, out_queue):
         super().__init__(daemon=True)
@@ -100,10 +100,16 @@ class TiDReceiver(threading.Thread):
             while self.bci.idStreamer_bus.Has("<tobiid", "/>"):
                 msg = self.bci.idStreamer_bus.Extract("<tobiid", "/>")
                 self.bci.id_serializer_bus.Deserialize(msg)
-                tmpmsg = int(round(float(self.bci.id_msg_bus.GetEvent())))
-                # Push only the class events we care about (1/2, but keep general)
-                if tmpmsg in (1, 2):
-                    self.out_queue.put((tmpmsg, time.time()))
+                try:
+                    prob = int(self.bci.id_msg_bus.GetEvent()) # ignore malformed payloads
+                    # print("Error probability:" + str(latest_prob))
+                    # clamp to [0,100] defensively
+                    if prob < 0: prob = 0
+                    if prob > 100: prob = 100
+                    self.out_queue.put((prob, time.time()))
+                except Exception:
+                    # ignore malformed payloads
+                    pass
 
             # Discard any tcstatus noise if present
             while self.bci.idStreamer_bus.Has("<tcstatus", "/>"):
@@ -127,7 +133,7 @@ class PyGameGUI:
         pygame.K_RIGHT
     ]
 
-    def __init__(self, save_frames=False, field_size=8, test=False, random_seeds=None, calibration=False, BCI=False):
+    def __init__(self, save_frames=False, field_size=8, test=False, random_seeds=None, calibration=False, BCI=False, threshold = 50):
         self.random_seeds = random_seeds or []
         pygame.init()
 
@@ -219,6 +225,8 @@ class PyGameGUI:
 
         self.tid_queue = queue.Queue()
         self.tid_thread = None
+        self.latest_prob = None
+        self.threshold = threshold
         if self.isLoop and self.bci is not None:
             self.tid_thread = TiDReceiver(self.bci, self.tid_queue)
             self.tid_thread.start()
@@ -233,36 +241,6 @@ class PyGameGUI:
     def sendTiD(self, value):
         self.bci.id_msg_bus.SetEvent(value)
         self.bci.iDsock_bus.sendall(str.encode(self.bci.id_serializer_bus.Serialize()))
-    
-    # def receiveTiD(self):
-    #     """Exact same pattern as 1D cursor"""
-    #     if not self.isLoop:
-    #         return None
-            
-    #     data = None
-    #     try:
-    #         data = self.bci.iDsock_bus.recv(512).decode("utf-8")
-    #         self.bci.idStreamer_bus.Append(data)
-    #     except:
-    #         return None
-        
-    #     # deserialize ID message
-    #     if (data):
-    #         if (self.bci.idStreamer_bus.Has("<tobiid", "/>")):
-    #             msg = self.bci.idStreamer_bus.Extract("<tobiid", "/>")
-    #             self.bci.id_serializer_bus.Deserialize(msg)
-    #             self.bci.idStreamer_bus.Clear()
-    #             tmpmsg = int(round(float(self.bci.id_msg_bus.GetEvent())))
-                
-    #             print("Received MATLAB Classification: ", tmpmsg)
-                
-    #             if (tmpmsg == 1):
-    #                 print('MATLAB: Correct Detected')
-    #                 return 1
-    #             elif (tmpmsg == 2):
-    #                 print('MATLAB: Error Detected')
-    #                 return 2
-    #     return None
 
     def pulse_button(self, which, ms=None):
         dur = (ms or self.button_pulse_ms) / 1000.0
@@ -276,7 +254,7 @@ class PyGameGUI:
     def drain_tid_events(self):
         """
         Pull all pending TiD events from the queue and return the list.
-        Each item is (tmpmsg:int, t:float).
+        Each item is (prob:int, t:float), where prob is the error probability from decoder in [0,100].
         """
         events = []
         try:
@@ -919,21 +897,16 @@ class PyGameGUI:
                     plus_button_pressed = False
             self.handle_pause()
             if collect_feedback and self.isLoop:
-                for (tmpmsg, tstamp) in self.drain_tid_events():
-                    # Map classification -> feedback
-                    if tmpmsg == 2:   # Error detected
-                        print("Received MATLAB Classification:", tmpmsg, "(Error)")
+                for (prob, tstamp) in self.drain_tid_events():
+                    # pass error probabilitity to tamer
+                    self.latest_prob = prob
+                    print("Error probability" + str(self.latest_prob))
+                    if(self.latest_prob >= self.threshold):
+                        self.pulse_button('minus')
                         feedback_log.append({"time": tstamp, "reward": -1})
-                        # hardware trigger label
                         self.parallel.signal(104)
-                        # error signal animates the minus button like it was manually clicked
-                        self.pulse_button('minus')                        
-                        print(3)
-                    elif tmpmsg == 1:
-                        print("Received MATLAB Classification:", tmpmsg, "(Correct)")
-                        # ignore no error detected case
-                        pass
-                    
+                    pass
+                   
             if self.frame_num == 0 and PLAY_SOUND:
                 pass  # No sound to play
             if self.last_head == [0,0]:
@@ -1106,16 +1079,16 @@ class PyGameGUI:
                                 flag_reward_plus  |= (event.key == pygame.K_EQUALS) # Using K_EQUALS for the plus key
                             # if we're in classification mode    
                             if self.isLoop:    
-                                for (tmpmsg, tstamp) in self.drain_tid_events():
-                                    if tmpmsg == 2:
-                                        feedback_log.append({"time": tstamp, "reward": -1})
-                                        # minus_button_pressed = True
-                                        self.parallel.signal(104)
-                                        print(3)
+                                for (prob, tstamp) in self.drain_tid_events():
+                                    # feed error probability to TAMER
+                                    self.latest_prob = prob
+                                    print("Error probability" + str(self.latest_prob))
+                                    if(self.latest_prob >= self.threshold):
                                         self.pulse_button('minus')
-                                    elif tmpmsg == 1:
-                                        pass    
-                               
+                                        feedback_log.append({"time": tstamp, "reward": -1})
+                                        self.parallel.signal(104)
+                                    pass 
+                                    
                             if flag_reward_minus:
                                 feedback_log.append({"time": time.time(), "reward": -1})
                                 minus_button_pressed = True
