@@ -193,8 +193,8 @@ class PyGameGUI:
                     # bookkeeping
                     episode_reward += timestep.reward
                     step_counter   += 1
-                    print(f"Step {self.env.timestep_index}: "
-                        f"Cumulative Reward = {episode_reward:.2f}")
+                    # print(f"Step {self.env.timestep_index}: "
+                    #     f"Cumulative Reward = {episode_reward:.2f}")
 
                     # render + small head-motion animation
                     curr_head = list(self.env.snake.head)

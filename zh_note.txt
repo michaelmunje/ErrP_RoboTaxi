@@ -49,10 +49,6 @@ python record_feedback.py
 # For running with Arduino and with Controller, use
 CONTROLLER=XBOX python record_feedback.py
 
-
-
-
-
 trained online tamer 2 inputs
 -1.08813584  0.90811553  0.7385555   0.41252044  0.17096985 -0.28861487
 
@@ -71,7 +67,7 @@ RUNNING EXPERIMENTS
 # The only noisy part is that the online learning agent (the agent that controls the taxi) will update its weights with a 60% accuracy on top of the true feedback.
 # If we want to run the experiment with negative feedback only, set the flag --negative-feedback-only.
 
-DEBUG_MODE=1 python record_feedback_online_tamer_noisy.py --agent tamer-online-noisy --lr 0.01 --lr-decay 0.998 --epsilon-train 0.2 --epsilon-test 0.1 --weight w1 --num-episodes 3 --negative-feedback-only --feedback-accuracy 1.0 
+DEBUG_MODE=1 python record_feedback_online_tamer_noisy.py --agent tamer-online-noisy --lr 0.01 --lr-decay 0.998 --epsilon-train 0.2 --epsilon-test 0.1 --weight w1 --num-episodes 3 --negative-feedback-only --feedback-accuracy 1.0 --seeds trial2
 
 # to use trial specific seeds, use --seeds trial1, trial2, trial3, trial4, trial5, trial6
 
@@ -95,7 +91,6 @@ this will generate another log file in the logs folder.. for example logs/2025-0
 then, plot the cumulative reward curve with:
 python analysis/analysis_weight_learning_progress.py logs/2025-06-02-11-29-03-online-tamer-noisy-cumulative-reward.log
 
-
 EXPERIMENT LOGGING
 detailed logs including true user feedback and noisy user feedback are saved in the logs folder.
 
@@ -103,6 +98,28 @@ python zh_visualize_tamer_online_training.py phase2-selected/subject1/robotaxilo
 phase2-selected/subject1/robotaxilog/2025-06-17-13-46-15-online-tamer-noisy.log
 
 python analysis/analysis_weight_learning_progress.py phase2-selected/subject1/robotaxilog/2025-06-17-13-46-15-online-tamer-noisy-cumulative-reward.log
+
+
+
+preprocess log for downstream ml tasks
+
+aggregation logs:
+
+zh_aggregate_transitions_to_csv.py
+
+logs/2025-09-09-17-49-02-online-tamer-noisy_v2.log
+logs/2025-09-09-19-52-44-online-tamer-noisy_v2.log
+logs/2025-09-09-19-56-04-online-tamer-noisy_v2.log
+logs/2025-09-09-20-17-11-online-tamer-noisy_v2.log
+logs/2025-09-09-21-13-00-online-tamer-noisy_v2.log
+logs/2025-09-09-20-37-12-online-tamer-noisy_v2.log
+logs/2025-09-09-21-38-51-online-tamer-noisy_v2.log
+logs/2025-09-09-22-14-34-online-tamer-noisy_v2.log
+logs/2025-09-09-22-14-55-online-tamer-noisy_v2.log
+
+
+
+
 
 
 
@@ -132,3 +149,408 @@ python analysis/analysis_weight_learning_progress.py phase2-selected/subject2/ro
 2025-06-17-14-01-03-online-tamer-noisy.log
 2025-06-17-14-11-34-online-tamer-noisy.log
 2025-06-17-14-21-28-online-tamer-noisy.log
+
+As of August 25, 2025, we have the following logs:
+
+python zh_visualize_tamer_online_training.py phase2-selected/subject4/2025-08-20-12-54-05-online-tamer-noisy_run1.log
+python zh_visualize_tamer_online_training.py phase2-selected/subject4/2025-08-20-13-04-28-online-tamer-noisy_run2.log
+python zh_visualize_tamer_online_training.py phase2-selected/subject4/2025-08-20-13-14-17-online-tamer-noisy_run3.log
+python zh_visualize_tamer_online_training.py phase2-selected/subject4/2025-08-20-13-22-45-online-tamer-noisy_run4.log
+
+python zh_visualize_tamer_online_training.py phase2-selected/subject6/2025-08-22-11-30-46-online-tamer-noisy.log
+python zh_visualize_tamer_online_training.py phase2-selected/subject6/2025-08-22-11-40-43-online-tamer-noisy.log
+python zh_visualize_tamer_online_training.py phase2-selected/subject6/2025-08-22-11-50-23-online-tamer-noisy.log
+python zh_visualize_tamer_online_training.py phase2-selected/subject6/2025-08-22-12-00-06-online-tamer-noisy.log
+
+python zh_visualize_tamer_online_training.py phase2-selected/subject6/subject6_1_decoding/2025-08-22-12-16-59-online-tamer-noisy.log
+python zh_visualize_tamer_online_training.py phase2-selected/subject6/subject6_2_decoding/2025-08-22-12-29-21-online-tamer-noisy.log
+python zh_visualize_tamer_online_training.py phase2-selected/subject6/subject6_3_decoding/2025-08-22-12-40-45-online-tamer-noisy.log
+python zh_visualize_tamer_online_training.py phase2-selected/subject6/subject6_4_decoding/2025-08-22-12-52-21-online-tamer-noisy.log
+
+
+python analysis/analysis_weight_learning_progress.py phase2-selected/subject4/2025-08-20-12-54-05-online-tamer-noisy_run1-cumulative-reward.log
+python analysis/analysis_weight_learning_progress.py phase2-selected/subject4/2025-08-20-13-04-28-online-tamer-noisy_run2-cumulative-reward.log
+python analysis/analysis_weight_learning_progress.py phase2-selected/subject4/2025-08-20-13-14-17-online-tamer-noisy_run3-cumulative-reward.log
+python analysis/analysis_weight_learning_progress.py phase2-selected/subject4/2025-08-20-13-22-45-online-tamer-noisy_run4-cumulative-reward.log
+
+python analysis/analysis_weight_learning_progress.py phase2-selected/subject6/2025-08-22-11-30-46-online-tamer-noisy-cumulative-reward.log
+python analysis/analysis_weight_learning_progress.py phase2-selected/subject6/2025-08-22-11-40-43-online-tamer-noisy-cumulative-reward.log
+python analysis/analysis_weight_learning_progress.py phase2-selected/subject6/2025-08-22-11-50-23-online-tamer-noisy-cumulative-reward.log
+python analysis/analysis_weight_learning_progress.py phase2-selected/subject6/2025-08-22-12-00-06-online-tamer-noisy-cumulative-reward.log
+
+python analysis/analysis_weight_learning_progress.py phase2-selected/subject6/subject6_1_decoding/2025-08-22-12-16-59-online-tamer-noisy-cumulative-reward.log
+python analysis/analysis_weight_learning_progress.py phase2-selected/subject6/subject6_2_decoding/2025-08-22-12-29-21-online-tamer-noisy-cumulative-reward.log
+python analysis/analysis_weight_learning_progress.py phase2-selected/subject6/subject6_3_decoding/2025-08-22-12-40-45-online-tamer-noisy-cumulative-reward.log
+python analysis/analysis_weight_learning_progress.py phase2-selected/subject6/subject6_4_decoding/2025-08-22-12-52-21-online-tamer-noisy-cumulative-reward.log
+
+
+phase2-selected/subject4/2025-08-20-12-54-05-online-tamer-noisy_detailed_run1.log
+phase2-selected/subject4/2025-08-20-12-54-05-online-tamer-noisy_run1.log
+phase2-selected/subject4/2025-08-20-13-04-28-online-tamer-noisy_detailed_run2.log
+phase2-selected/subject4/2025-08-20-13-04-28-online-tamer-noisy_run2.log
+phase2-selected/subject4/2025-08-20-13-14-17-online-tamer-noisy_detailed_run3.log
+phase2-selected/subject4/2025-08-20-13-14-17-online-tamer-noisy_run3.log
+phase2-selected/subject4/2025-08-20-13-22-45-online-tamer-noisy_detailed_run4.log
+phase2-selected/subject4/2025-08-20-13-22-45-online-tamer-noisy_run4.log
+
+
+phase2-selected/subject6/2025-08-22-11-30-46-online-tamer-noisy_detailed.log
+phase2-selected/subject6/2025-08-22-11-30-46-online-tamer-noisy.log
+phase2-selected/subject6/2025-08-22-11-40-43-online-tamer-noisy_detailed.log
+phase2-selected/subject6/2025-08-22-11-40-43-online-tamer-noisy.log
+phase2-selected/subject6/2025-08-22-11-50-23-online-tamer-noisy_detailed.log
+phase2-selected/subject6/2025-08-22-11-50-23-online-tamer-noisy.log
+phase2-selected/subject6/2025-08-22-12-00-06-online-tamer-noisy_detailed.log
+phase2-selected/subject6/2025-08-22-12-00-06-online-tamer-noisy.log
+
+phase2-selected/subject6/subject6_1_decoding/2025-08-22-12-16-59-online-tamer-noisy_detailed.log
+phase2-selected/subject6/subject6_1_decoding/2025-08-22-12-16-59-online-tamer-noisy.log
+phase2-selected/subject6/subject6_2_decoding/2025-08-22-12-29-21-online-tamer-noisy_detailed.log
+phase2-selected/subject6/subject6_2_decoding/2025-08-22-12-29-21-online-tamer-noisy.log
+phase2-selected/subject6/subject6_3_decoding/2025-08-22-12-40-45-online-tamer-noisy_detailed.log
+phase2-selected/subject6/subject6_3_decoding/2025-08-22-12-40-45-online-tamer-noisy.log
+phase2-selected/subject6/subject6_4_decoding/2025-08-22-12-52-21-online-tamer-noisy_detailed.log
+phase2-selected/subject6/subject6_4_decoding/2025-08-22-12-52-21-online-tamer-noisy.log
+
+
+as of aug 26
+
+
+conda activate ErrP2
+python zh_visualize_tamer_online_training.py phase2-selected/subject7/2025-08-25-17-12-58-online-tamer-noisy.log
+python zh_visualize_tamer_online_training.py phase2-selected/subject7/2025-08-25-17-23-59-online-tamer-noisy.log
+python zh_visualize_tamer_online_training.py phase2-selected/subject7/2025-08-25-17-32-46-online-tamer-noisy.log
+python zh_visualize_tamer_online_training.py phase2-selected/subject7/2025-08-25-17-41-09-online-tamer-noisy.log
+
+python zh_visualize_tamer_online_training.py phase2-selected/subject7/subject7_1_decoding/2025-08-25-17-55-26-online-tamer-noisy.log
+python zh_visualize_tamer_online_training.py phase2-selected/subject7/subject7_2_decoding/2025-08-25-18-09-43-online-tamer-noisy.log
+python zh_visualize_tamer_online_training.py phase2-selected/subject7/subject7_3_decoding/2025-08-25-18-19-23-online-tamer-noisy.log
+python zh_visualize_tamer_online_training.py phase2-selected/subject7/subject7_4_decoding/2025-08-25-18-27-51-online-tamer-noisy.log
+
+
+python analysis/analysis_weight_learning_progress.py phase2-selected/subject7/2025-08-25-17-12-58-online-tamer-noisy-cumulative-reward.log
+python analysis/analysis_weight_learning_progress.py phase2-selected/subject7/2025-08-25-17-23-59-online-tamer-noisy-cumulative-reward.log
+python analysis/analysis_weight_learning_progress.py phase2-selected/subject7/2025-08-25-17-32-46-online-tamer-noisy-cumulative-reward.log
+python analysis/analysis_weight_learning_progress.py phase2-selected/subject7/2025-08-25-17-41-09-online-tamer-noisy-cumulative-reward.log
+
+python analysis/analysis_weight_learning_progress.py phase2-selected/subject7/subject7_1_decoding/2025-08-25-17-55-26-online-tamer-noisy-cumulative-reward.log
+python analysis/analysis_weight_learning_progress.py phase2-selected/subject7/subject7_2_decoding/2025-08-25-18-09-43-online-tamer-noisy-cumulative-reward.log
+python analysis/analysis_weight_learning_progress.py phase2-selected/subject7/subject7_3_decoding/2025-08-25-18-19-23-online-tamer-noisy-cumulative-reward.log
+python analysis/analysis_weight_learning_progress.py phase2-selected/subject7/subject7_4_decoding/2025-08-25-18-27-51-online-tamer-noisy-cumulative-reward.log
+
+saved plot to phase2-selected/subject7/2025-08-25-17-12-58-online-tamer-noisy-cumulative-reward.log.png
+Parsed 41 entries.
+saved plot to phase2-selected/subject7/2025-08-25-17-23-59-online-tamer-noisy-cumulative-reward.log.png
+Parsed 40 entries.
+saved plot to phase2-selected/subject7/2025-08-25-17-32-46-online-tamer-noisy-cumulative-reward.log.png
+Parsed 41 entries.
+saved plot to phase2-selected/subject7/2025-08-25-17-41-09-online-tamer-noisy-cumulative-reward.log.png
+
+
+python /home/zhihan/Documents/Code/ErrP_RoboTaxi/zh_train_tamer_offline_from_feature_logs.py /home/zhihan/Documents/Code/ErrP_RoboTaxi/phase2-selected/subject6/subject6_4_decoding/2025-08-22-12-52-21-online-tamer-noisy.log /home/zhihan/Documents/Code/ErrP_RoboTaxi/phase2-selected/subject6/subject6_2_decoding/2025-08-22-12-29-21-online-tamer-noisy.log /home/zhihan/Documents/Code/ErrP_RoboTaxi/phase2-selected/subject6/subject6_3_decoding/2025-08-22-12-40-45-online-tamer-noisy.log /home/zhihan/Documents/Code/ErrP_RoboTaxi/phase2-selected/subject6/subject6_1_decoding/2025-08-22-12-16-59-online-tamer-noisy.log --init-w log --alpha 0.01 --epochs 1 --out-log /home/zhihan/Documents/Code/ErrP_RoboTaxi/phase2-selected/subject6/4decodedv2-offline-tamer-noisy.log
+
+python zh_visualize_tamer_online_training.py phase2-selected/subject6/subject6_1_decoding/offline-2025-08-22-12-16-59-online-tamer-noisy.log
+python zh_visualize_tamer_online_training.py /home/zhihan/Documents/Code/ErrP_RoboTaxi/phase2-selected/subject6/4decodedv2-offline-tamer-noisy.log
+
+python analysis/analysis_weight_learning_progress.py phase2-selected/subject6/subject6_1_decoding/offline-2025-08-22-12-16-59-online-tamer-noisy-cumulative-reward.log
+python analysis/analysis_weight_learning_progress.py phase2-selected/subject6/4decoded-offline-tamer-noisy-cumulative-reward.log
+python analysis/analysis_weight_learning_progress.py phase2-selected/subject6/4decodedv2-offline-tamer-noisy-cumulative-reward.log
+
+
+
+Box where Ana uploads all logs https://utexas.app.box.com/s/tgi10wyuxhfu4l3irn1wxsfo30f0i0jr
+
+4: is head 5 is body / tail
+
+
+python3 /home/zhihan/Documents/Code/ErrP_RoboTaxi/parse_log_states_to_csv.py \
+  /home/zhihan/Documents/Code/ErrP_RoboTaxi/phase2-selected/subject6/additional_log_files/autocar_8_test_20250822-113047_offline.log
+
+TODO
+
+python3 /home/zhihan/Documents/Code/ErrP_RoboTaxi/aggregate_states_and_gt.py \
+  --states-glob "/home/zhihan/Documents/Code/ErrP_RoboTaxi/phase2-selected/subject7/additional_log_files/*_offline_states.csv" \
+  --gt "/home/zhihan/Documents/Code/ErrP_RoboTaxi/phase2-selected/subject7/keypress_gt.csv" \
+  --output "/home/zhihan/Documents/Code/ErrP_RoboTaxi/phase2-selected/subject7/additional_log_files/aggregated_states_gt.csv"
+
+
+
+/home/zhihan/Documents/Code/ErrP_RoboTaxi/phase2-selected/subject6/additional_log_files/aggregated_states_gt_subject6.csv
+
+
+/home/zhihan/Documents/Code/ErrP_RoboTaxi/phase2-selected/subject7/additional_log_files/aggregated_states_gt_subject7.csv
+
+python3 /home/zhihan/Documents/Code/ErrP_RoboTaxi/train_gt_classifier.py --epochs 30 --batch-size 128 --lr 5e-4 --eval-every 1 --patience 3 --quite
+
+DEBUG_MODE=1 python record_feedback_online_tamer_noisy.py --agent tamer-online-noisy --lr 0.00 --lr-decay 0.998 --epsilon-train 1 --epsilon-test 0.1 --weight w1 --num-episodes 10 --negative-feedback-only --feedback-accuracy 1.0 --seeds trial2
+
+DEBUG_MODE=1 python record_feedback_online_tamer_noisy.py --agent tamer-online-noisy --lr 0.01 --lr-decay 0.998 --epsilon-train 1 --epsilon-test 0.1 --weight w2 --num-episodes 10 --negative-feedback-only --feedback-accuracy 0.65 --seeds trial2
+
+export DISPLAY=:1
+
+
+then, run python zh_visualize_tamer_online_training.py <your_log_file_path> , for example:
+`python zh_visualize_tamer_online_training.py logs/2025-09-09-11-26-09-online-tamer-noisy.log`
+this will generate another log file in the logs folder.. for example logs/2025-06-02-11-29-03-online-tamer-noisy-cumulative-reward.log
+
+then, plot the cumulative reward curve with:
+`python analysis/analysis_weight_learning_progress.py logs/2025-09-09-11-26-09-online-tamer-noisy-cumulative-reward.log`
+
+/home/zhihan/Documents/Code/ErrP_RoboTaxi/logs/2025-09-09-11-26-09-online-tamer-noisy.log
+
+DEBUG_MODE=1 python record_feedback_online_tamer_noisy.py --agent tamer-online-noisy --lr 0.1 --lr-decay 0.99 --epsilon-train 1 --epsilon-test 0.1 --weight w2 --num-episodes 10 --negative-feedback-only --feedback-accuracy 0.65 --seeds trial2
+
+DEBUG_MODE=1 python record_feedback_online_tamer_noisy.py --agent tamer-online-noisy --lr 0.1 --lr-decay 0.99 --epsilon-train 1 --epsilon-test 0.1 --weight "[ 0.21368761,  0.26135011,  0.14799667, -0.01687456, -0.09342056, -0.24668366]" --num-episodes 10 --negative-feedback-only --feedback-accuracy 0.65 --seeds trial2
+
+
+DEBUG_MODE=1 python record_feedback_online_tamer_noisy.py --agent tamer-online-noisy --lr 0.1 --lr-decay 0.99 --epsilon-train 0.2 --epsilon-test 0.1 --weight w2 --num-episodes 10 --negative-feedback-only --feedback-accuracy 0.65 --seeds trial2
+
+
+
+phase2-selected/subject_zhihan/additional_log_files/aggregated_states_gt_subject6.csv
+
+python3 /home/zhihan/Documents/Code/ErrP_RoboTaxi/train_gt_classifier.py --epochs 30 --batch-size 128 --lr 5e-4 --eval-every 1 --patience 3 --quite
+
+DEBUG_MODE=1 python record_feedback_online_tamer_noisy.py --agent tamer-online-noisy --lr 0.05 --lr-decay 0.99 --epsilon-train 0.2 --epsilon-test 0.1 --weight w2 --num-episodes 10 --negative-feedback-only --feedback-accuracy 0.65 --seeds trial2
+
+
+2025-09-09-19-56-04-online-tamer-noisy.log
+
+
+create a bash script that given the following log file
+logs/2025-09-09-19-56-04-online-tamer-noisy.log
+
+it activates the conda environment "ErrP2"
+
+it runs 
+python zh_visualize_tamer_online_training.py logs/2025-09-09-19-56-04-online-tamer-noisy.log
+
+after that, it runs
+python analysis/analysis_weight_learning_progress.py logs/2025-09-09-19-56-04-online-tamer-noisy-cumulative-reward.log
+
+(note that the second name of the log file is the cumulative reward log file)
+
+bash /home/zhihan/Documents/Code/ErrP_RoboTaxi/run_visualize_and_analyze.sh logs/2025-09-10-14-45-40-online-tamer-noisy.log
+
+DEBUG_MODE=1 python record_feedback_online_tamer_noisy.py --agent tamer-online-noisy --lr 0.05 --lr-decay 0.99 --epsilon-train 0.2 --epsilon-test 0.1 --weight w2 --num-episodes 10 --negative-feedback-only --feedback-accuracy 1 --seeds trial2
+
+bash /home/zhihan/Documents/Code/ErrP_RoboTaxi/run_visualize_and_analyze.sh logs/2025-09-09-21-38-51-online-tamer-noisy.log v3
+logs/2025-09-09-20-17-11-online-tamer-noisy.log
+
+
+DEBUG_MODE=1 python record_feedback_online_tamer_noisy.py --agent tamer-online-noisy --lr 0.05 --lr-decay 0.995 --epsilon-train 0.2 --epsilon-test 0.1 --weight w2 --num-episodes 10 --negative-feedback-only --feedback-accuracy 0.65 --seeds trial2
+
+DEBUG_MODE=1 python record_feedback_online_tamer_noisy.py --feature-version v3 --agent tamer-online-noisy --lr 0.05 --lr-decay 0.995 --epsilon-train 0.2 --epsilon-test 0.1 --weight w2 --num-episodes 10 --negative-feedback-only --feedback-accuracy 0.8 --seeds trial2
+
+
+aggregation logs:
+
+zh_aggregate_transitions_to_csv.py
+
+logs/2025-09-09-17-49-02-online-tamer-noisy_v2.log
+logs/2025-09-09-19-52-44-online-tamer-noisy_v2.log
+logs/2025-09-09-19-56-04-online-tamer-noisy_v2.log
+logs/2025-09-09-20-17-11-online-tamer-noisy_v2.log
+logs/2025-09-09-21-13-00-online-tamer-noisy_v2.log
+logs/2025-09-09-20-37-12-online-tamer-noisy_v2.log
+logs/2025-09-09-21-38-51-online-tamer-noisy_v2.log
+logs/2025-09-09-22-14-34-online-tamer-noisy_v2.log
+logs/2025-09-09-22-14-55-online-tamer-noisy_v2.log
+
+
+python /home/zhihan/Documents/Code/ErrP_RoboTaxi/zh_aggregate_transitions_to_csv.py --exp allexps:logs/2025-09-09-07-59-05-online-tamer-noisy_v2_zdc_conti.log,logs/2025-09-08-21-59-04-online-tamer-noisy_v2_zdc_conti.log,logs/2025-09-09-08-06-09-online-tamer-noisy_v2_zdc_conti.log --exp 20250909-acc65-r:logs/2025-09-09-14-54-17-online-tamer-noisy_v2_65.log,logs/2025-09-09-16-33-44-online-tamer-noisy_v2_65_conti.log --out /home/zhihan/Documents/Code/ErrP_RoboTaxi/phase2-selected/subject_zhihan/additional_log_files/aggregated_states_gt_subject6.csv | cat
+
+
+python3 /home/zhihan/Documents/Code/ErrP_RoboTaxi/zh_aggregate_transitions_to_csv.py --out /home/zhihan/Documents/Code/ErrP_RoboTaxi/phase2-selected/subject_zhihan/additional_log_files/aggregated_states_v2_all.csv --exp 2025-09-09-17-49-02-online-tamer-noisy_v2:/home/zhihan/Documents/Code/ErrP_RoboTaxi/logs/2025-09-09-17-49-02-online-tamer-noisy_v2.log --exp 2025-09-09-19-52-44-online-tamer-noisy_v2:/home/zhihan/Documents/Code/ErrP_RoboTaxi/logs/2025-09-09-19-52-44-online-tamer-noisy_v2.log --exp 2025-09-09-19-56-04-online-tamer-noisy_v2:/home/zhihan/Documents/Code/ErrP_RoboTaxi/logs/2025-09-09-19-56-04-online-tamer-noisy_v2.log --exp 2025-09-09-20-17-11-online-tamer-noisy_v2:/home/zhihan/Documents/Code/ErrP_RoboTaxi/logs/2025-09-09-20-17-11-online-tamer-noisy_v2.log --exp 2025-09-09-21-13-00-online-tamer-noisy_v2:/home/zhihan/Documents/Code/ErrP_RoboTaxi/logs/2025-09-09-21-13-00-online-tamer-noisy_v2.log --exp 2025-09-09-20-37-12-online-tamer-noisy_v2:/home/zhihan/Documents/Code/ErrP_RoboTaxi/logs/2025-09-09-20-37-12-online-tamer-noisy_v2.log --exp 2025-09-09-21-38-51-online-tamer-noisy_v2:/home/zhihan/Documents/Code/ErrP_RoboTaxi/logs/2025-09-09-21-38-51-online-tamer-noisy_v2.log --exp 2025-09-09-22-14-34-online-tamer-noisy_v2:/home/zhihan/Documents/Code/ErrP_RoboTaxi/logs/2025-09-09-22-14-34-online-tamer-noisy_v2.log --exp 2025-09-09-22-14-55-online-tamer-noisy_v2:/home/zhihan/Documents/Code/ErrP_RoboTaxi/logs/2025-09-09-22-14-55-online-tamer-noisy_v2.log
+
+export DISPLAY=:1
+
+DEBUG_MODE=1 python record_feedback_online_tamer_noisy.py --feature_version v3 --agent tamer-online-noisy --lr 0.05 --lr-decay 0.995 --epsilon-train 0.2 --epsilon-test 0.1 --weight w2 --num-episodes 10 --negative-feedback-only --feedback-accuracy 0.8 --seeds trial2
+
+
+DEBUG_MODE=1 python record_feedback_online_tamer_noisy.py --feature_version v3 --agent tamer-online-noisy --lr 1 --lr-decay 0.995 --epsilon-train 0.2 --epsilon-test 0.1 --weight w20 --num-episodes 10 --negative-feedback-only --feedback-accuracy 0.8 --seeds trial2
+
+logs/2025-09-10-17-27-11-online-tamer-noisy.log
+
+bash /home/zhihan/Documents/Code/ErrP_RoboTaxi/run_visualize_and_analyze.sh logs/2025-09-10-17-27-11-online-tamer-noisy.log v3
+
+
+python /home/zhihan/Documents/Code/ErrP_RoboTaxi/zh_train_tamer_offline_from_feature_logs.py /home/zhihan/Documents/Code/ErrP_RoboTaxi/phase2-selected/subject6/subject6_4_decoding/2025-08-22-12-52-21-online-tamer-noisy.log /home/zhihan/Documents/Code/ErrP_RoboTaxi/phase2-selected/subject6/subject6_2_decoding/2025-08-22-12-29-21-online-tamer-noisy.log /home/zhihan/Documents/Code/ErrP_RoboTaxi/phase2-selected/subject6/subject6_3_decoding/2025-08-22-12-40-45-online-tamer-noisy.log /home/zhihan/Documents/Code/ErrP_RoboTaxi/phase2-selected/subject6/subject6_1_decoding/2025-08-22-12-16-59-online-tamer-noisy.log --init-w log --alpha 0.01 --epochs 1 --out-log /home/zhihan/Documents/Code/ErrP_RoboTaxi/phase2-selected/subject6/4decodedv2-offline-tamer-noisy.log
+
+
+zh_train_tamer_offline_from_log_v2.py phase2-selected/subject_zhihan/additional_log_files/aggregated_states_featurev3.csv --alpha 1 --init-w w20 --epochs 1 --out-log phase2-selected/subject_zhihan/additional_log_files/aggregated_states_v2_all_offline.log
+
+
+bash /home/zhihan/Documents/Code/ErrP_RoboTaxi/run_visualize_and_analyze.sh phase2-selected/subject_zhihan/additional_log_files/aggregated_states_v2_all_offline.log
+
+
+python3 zh_aggregate_transitions_to_csv.py --out /home/zhihan/Documents/Code/ErrP_RoboTaxi/phase2-selected/subject_zhihan/additional_log_files/aggregated_states_featurev3.csv --exp exp1:logs/2025-09-10-17-27-11-online-tamer-noisy_v2.log 
+
+logs/2025-09-10-17-27-11-online-tamer-noisy_v2.log
+
+
+phase2-selected/subject_zhihan/additional_log_files/aggregated_states_featurev3.csv
+
+
+
+logs/2025-09-10-11-26-34-online-tamer-noisy_v2.log
+logs/2025-09-10-14-43-11-online-tamer-noisy_v2.log
+
+
+python3 /home/zhihan/Documents/Code/ErrP_RoboTaxi/zh_aggregate_transitions_to_csv.py --out /home/zhihan/Documents/Code/ErrP_RoboTaxi/phase2-selected/subject_zhihan/additional_log_files/aggregated_states_v2_all_acc100.csv --exp acc100:logs/2025-09-10-11-26-34-online-tamer-noisy_v2.log --exp acc100:logs/2025-09-10-14-43-11-online-tamer-noisy_v2.log
+
+/home/zhihan/Documents/Code/ErrP_RoboTaxi/phase2-selected/subject_zhihan/additional_log_files/aggregated_states_v2_all_acc100.csv
+
+python zh_train_tamer_offline_from_log_v2.py phase2-selected/subject_zhihan/additional_log_files/aggregated_states_v2_all_acc100.csv --alpha 1 --init-w w20 --epochs 3 --out-log phase2-selected/subject_zhihan/additional_log_files/aggregated_states_v2_all_offline100.log
+
+bash /home/zhihan/Documents/Code/ErrP_RoboTaxi/run_visualize_and_analyze.sh phase2-selected/subject_zhihan/additional_log_files/aggregated_states_v2_all_offline100.log
+
+
+2025-09-10-17-27-11-online-tamer-noisy_v2.log
+
+
+python3 zh_aggregate_transitions_to_csv.py --out phase2-selected/subject_zhihan/additional_log_files/aggregated_states_80.csv --exp 80acc:logs/2025-09-10-17-27-11-online-tamer-noisy_v2.log
+
+phase2-selected/subject_zhihan/additional_log_files/aggregated_states_80.csv
+
+python zh_train_tamer_offline_from_log_v2.py phase2-selected/subject_zhihan/additional_log_files/aggregated_states_featurev3.csv --alpha 0.1 --init-w w20 --epochs 1 --out-log phase2-selected/subject_zhihan/additional_log_files/aggregated_states_v2_all_offline.log --n-samples 800
+
+
+python zh_train_tamer_offline_from_log_v2.py phase2-selected/subject_zhihan/additional_log_files/aggregated_states_featurev3.csv --alpha 0.1 --init-w w20 --epochs 1 --out-log phase2-selected/subject_zhihan/additional_log_files/aggregated_states_v2_all_offline.log --use_noisy_reward
+
+
+python zh_train_tamer_offline_from_log_v2.py phase2-selected/subject_zhihan/additional_log_files/aggregated_states_featurev3.csv --alpha 0.6 --init-w w20 --epochs 1 --out-log phase2-selected/subject_zhihan/additional_log_files/run_80noice06.log --use_noisy_reward
+
+python zh_train_tamer_offline_from_log_v2.py phase2-selected/subject_zhihan/additional_log_files/aggregated_states_featurev3.csv --alpha 0.1 --init-w w20 --epochs 1 --out-log phase2-selected/subject_zhihan/additional_log_files/run_80noice01.log --use_noisy_reward
+
+python zh_train_tamer_offline_from_log_v2.py phase2-selected/subject_zhihan/additional_log_files/aggregated_states_featurev3.csv --alpha 0.3 --init-w w20 --epochs 1 --out-log phase2-selected/subject_zhihan/additional_log_files/run_w1_80noice03.log --use_noisy_reward
+
+python zh_train_tamer_offline_from_log_v2.py phase2-selected/subject_zhihan/additional_log_files/aggregated_states_featurev3.csv --alpha 0.3 --init-w w20 --epochs 1 --out-log phase2-selected/subject_zhihan/additional_log_files/run_w1_80noice03.log --use_noisy_reward
+
+python zh_train_tamer_offline_from_log_v2.py phase2-selected/subject_zhihan/additional_log_files/aggregated_states_featurev3.csv --alpha 1 --init-w w20 --epochs 1 --out-log phase2-selected/subject_zhihan/additional_log_files/run_80noice_shuffle.log --use_noisy_reward --shuffle
+
+python zh_train_tamer_offline_from_log_v2.py phase2-selected/subject_zhihan/additional_log_files/aggregated_states_featurev3.csv --alpha 0.1 --init-w w20 --epochs 1 --out-log phase2-selected/subject_zhihan/additional_log_files/run_00noice.log
+
+
+Offline training log written to phase2-selected/subject_zhihan/additional_log_files/run_80noice.log
+Parsed 796 samples from 1 file(s)
+Initializing w from preset w20: [ 0.7768216 -0.9317696 -0.5280239  0.3182322 -0.2639944  0.9958436]
+Training complete.
+Epoch 1 sum |error| = 240.730882
+Final weights: [ 0.09715428 -1.07581046  0.1208366   0.12490585 -0.2639944   0.9958436 ]
+Offline training log written to phase2-selected/subject_zhihan/additional_log_files/run_80noice_shuffle.log
+Parsed 796 samples from 1 file(s)
+Initializing w from preset w20: [ 0.7768216 -0.9317696 -0.5280239  0.3182322 -0.2639944  0.9958436]
+Training complete.
+Epoch 1 sum |error| = 142.479696
+Final weights: [ 0.61945291 -1.08635283  0.86470728  0.01482027 -0.2639944   0.9958436 ]
+Offline training log written to phase2-selected/subject_zhihan/additional_log_files/run_00noice.log
+
+
+
+phase2-selected/subject_zhihan/additional_log_files/run_80noice.log
+phase2-selected/subject_zhihan/additional_log_files/run_80noice_shuffle.log
+phase2-selected/subject_zhihan/additional_log_files/run_00noice.log
+
+
+bash /home/zhihan/Documents/Code/ErrP_RoboTaxi/run_visualize_and_analyze.sh phase2-selected/subject_zhihan/additional_log_files/run_80noice.log v3
+bash /home/zhihan/Documents/Code/ErrP_RoboTaxi/run_visualize_and_analyze.sh phase2-selected/subject_zhihan/additional_log_files/run_80noice06.log v3
+bash /home/zhihan/Documents/Code/ErrP_RoboTaxi/run_visualize_and_analyze.sh phase2-selected/subject_zhihan/additional_log_files/run_80noice01.log v3
+bash /home/zhihan/Documents/Code/ErrP_RoboTaxi/run_visualize_and_analyze.sh phase2-selected/subject_zhihan/additional_log_files/run_80noice_shuffle.log v3
+bash /home/zhihan/Documents/Code/ErrP_RoboTaxi/run_visualize_and_analyze.sh phase2-selected/subject_zhihan/additional_log_files/run_00noice.log v3
+bash /home/zhihan/Documents/Code/ErrP_RoboTaxi/run_visualize_and_analyze.sh phase2-selected/subject_zhihan/additional_log_files/run_w1_80noice03.log v3
+
+
+python zh_train_tamer_offline_from_log_v2.py phase2-selected/subject_zhihan/additional_log_files/aggregated_states_featurev3.csv --alpha 0.3 --init-w w20 --epochs 1 --out-log phase2-selected/subject_zhihan/additional_log_files/run_w1_80noice03_v4.log --use_noisy_reward --feature_version v4
+
+python zh_train_tamer_offline_from_log_v2.py phase2-selected/subject_zhihan/additional_log_files/aggregated_states_featurev3.csv --alpha 1 --init-w w20 --epochs 1 --out-log phase2-selected/subject_zhihan/additional_log_files/run_w1_80noice10_v4.log --use_noisy_reward --feature_version v4
+
+
+
+bash /home/zhihan/Documents/Code/ErrP_RoboTaxi/run_visualize_and_analyze.sh phase2-selected/subject_zhihan/additional_log_files/run_w1_80noice03_v4.log v4
+
+bash /home/zhihan/Documents/Code/ErrP_RoboTaxi/run_visualize_and_analyze.sh phase2-selected/subject_zhihan/additional_log_files/run_w1_80noice10_v4.log v4
+
+
+
+python zh_train_tamer_offline_from_log_v2.py phase2-selected/subject_zhihan/additional_log_files/aggregated_states_featurev3.csv --alpha 0.3 --init-w w10 --epochs 1 --out-log phase2-selected/subject_zhihan/additional_log_files/run_w10_80noice03_v4.log --use_noisy_reward --feature_version v4
+
+python zh_train_tamer_offline_from_log_v2.py phase2-selected/subject_zhihan/additional_log_files/aggregated_states_featurev3.csv --alpha 1 --init-w w10 --epochs 1 --out-log phase2-selected/subject_zhihan/additional_log_files/run_w10_80noice10_v4_noshuffle.log --use_noisy_reward --feature_version v4
+
+bash /home/zhihan/Documents/Code/ErrP_RoboTaxi/run_visualize_and_analyze.sh phase2-selected/subject_zhihan/additional_log_files/run_w10_80noice03_v4.log v4
+
+bash /home/zhihan/Documents/Code/ErrP_RoboTaxi/run_visualize_and_analyze.sh phase2-selected/subject_zhihan/additional_log_files/run_w10_80noice10_v4.log v4
+
+
+python zh_train_tamer_offline_from_log_v2.py phase2-selected/subject_zhihan/additional_log_files/aggregated_states_featurev3.csv --alpha 1 --init-w w10 --epochs 1 --out-log phase2-selected/subject_zhihan/additional_log_files/run_w10_80noice10_v4.log --shuffle --proxy_acc 0.8 --feature_version v4
+
+
+bash /home/zhihan/Documents/Code/ErrP_RoboTaxi/run_visualize_and_analyze.sh phase2-selected/subject_zhihan/additional_log_files/run_w10_80noice10_v4.log v4
+
+bash /home/zhihan/Documents/Code/ErrP_RoboTaxi/run_visualize_and_analyze.sh phase2-selected/subject_zhihan/additional_log_files/run_w10_80noice10_v4.log v4
+
+
+python zh_train_tamer_offline_from_log_v2.py phase2-selected/subject_zhihan/additional_log_files/aggregated_states_featurev3.csv --alpha 1 --init-w w10 --epochs 1 --out-log phase2-selected/subject_zhihan/additional_log_files/run_w10_60noice10_v4.log --shuffle --proxy_acc 0.6 --feature_version v4
+
+bash /home/zhihan/Documents/Code/ErrP_RoboTaxi/run_visualize_and_analyze.sh phase2-selected/subject_zhihan/additional_log_files/run_w10_60noice10_v4.log v4
+
+
+bash /home/zhihan/Documents/Code/ErrP_RoboTaxi/run_visualize_and_analyze.sh phase2-selected/subject_zhihan/additional_log_files/run_w10_80noice10_v4_noshuffle.log v4
+
+
+python zh_train_tamer_offline_from_log_v2.py phase2-selected/subject_zhihan/additional_log_files/aggregated_states_featurev3.csv --alpha 0.3 --init-w w10 --epochs 1 --out-log phase2-selected/subject_zhihan/additional_log_files/run_w10_50noice10_v4.log --shuffle --proxy_acc 0.5 --feature_version v4
+
+bash /home/zhihan/Documents/Code/ErrP_RoboTaxi/run_visualize_and_analyze.sh phase2-selected/subject_zhihan/additional_log_files/run_w10_50noice10_v4.log v4
+
+python zh_train_tamer_offline_from_log_v2.py phase2-selected/subject_zhihan/additional_log_files/aggregated_states_featurev3.csv --alpha 0.3 --init-w w10 --epochs 1 --out-log phase2-selected/subject_zhihan/additional_log_files/run_w10_55noice10_v4.log --shuffle --proxy_acc 0.5 --feature_version v4
+
+bash /home/zhihan/Documents/Code/ErrP_RoboTaxi/run_visualize_and_analyze.sh phase2-selected/subject_zhihan/additional_log_files/run_w10_55noice10_v4.log v4
+
+
+python zh_train_tamer_offline_from_log_v2.py phase2-selected/subject_zhihan/additional_log_files/aggregated_states_featurev3.csv --alpha 0.3 --init-w w20 --epochs 1 --out-log phase2-selected/subject_zhihan/additional_log_files/run_w20_50noice10_v4.log --shuffle --proxy_acc 0.5 --feature_version v4
+
+bash /home/zhihan/Documents/Code/ErrP_RoboTaxi/run_visualize_and_analyze.sh phase2-selected/subject_zhihan/additional_log_files/run_w20_50noice10_v4.log v4
+
+python zh_train_tamer_offline_from_log_v2.py phase2-selected/subject_zhihan/additional_log_files/aggregated_states_featurev3.csv --alpha 0.3 --init-w w20 --epochs 1 --out-log phase2-selected/subject_zhihan/additional_log_files/run_w20_60noice10_v4.log --shuffle --proxy_acc 0.6 --feature_version v4
+
+bash /home/zhihan/Documents/Code/ErrP_RoboTaxi/run_visualize_and_analyze.sh phase2-selected/subject_zhihan/additional_log_files/run_w20_60noice10_v4.log v4
+
+
+TODO: try these two
+
+DEBUG_MODE=1 python record_feedback_online_tamer_noisy.py --feature_version v4 --agent tamer-online-noisy --lr 0.3 --lr-decay 0.995 --epsilon-train 0.2 --epsilon-test 0.1 --weight w20 --num-episodes 10 --negative-feedback-only --feedback-accuracy 0.6 --seeds trial2
+
+# This is attempted, but worked poorly
+DEBUG_MODE=1 python record_feedback_online_tamer_noisy.py --feature_version v4 --agent tamer-online-noisy --lr 1.0 --lr-decay 0.995 --epsilon-train 0.2 --epsilon-test 0.1 --weight w20 --num-episodes 10 --negative-feedback-only --feedback-accuracy 0.6 --seeds trial2
+
+# maybe try start with a high epsilon and then decay it, need to add proper epsilon decay logic in the code because
+DEBUG_MODE=1 python record_feedback_online_tamer_noisy.py --feature_version v4 --agent tamer-online-noisy --lr 1.0 --lr-decay 0.995 --epsilon-train 0.3 --epsilon-test 0.1 --weight w20 --num-episodes 10 --negative-feedback-only --feedback-accuracy 0.6 --seeds trial2
+
+export DISPLAY=:1
+
+
+Sept 15, 2025
+
+maybe try this again
+# This does not quite converge to a good spot
+DEBUG_MODE=1 python record_feedback_online_tamer_noisy.py --feature_version v4 --agent tamer-online-noisy --lr 1.0 --lr-decay 0.995 --epsilon-train 0.3 --epsilon-test 0.1 --weight w20 --num-episodes 10 --negative-feedback-only --feedback-accuracy 0.6 --seeds trial2
+
+2025-09-15-23-37-08-online-tamer-noisy.log
+
+bash /home/zhihan/Documents/Code/ErrP_RoboTaxi/run_visualize_and_analyze.sh logs/2025-09-15-23-37-08-online-tamer-noisy.log v4
+
+
+
+this one should converge as the policy is all random at feedback time
+DEBUG_MODE=1 python record_feedback_online_tamer_noisy.py --feature_version v4 --agent tamer-online-noisy --lr 1.0 --lr-decay 0.995 --epsilon-train 1.0 --epsilon-test 0.1 --weight w20 --num-episodes 10 --negative-feedback-only 
+
+
+
+logs/2025-09-16-08-26-27-online-tamer-noisy.log
+bash /home/zhihan/Documents/Code/ErrP_RoboTaxi/run_visualize_and_analyze.sh logs/2025-09-16-08-26-27-online-tamer-noisy.log v4
+
+
+More Docs:
+
+
+Lark link: https://lusr6tzu022d.sg.larksuite.com/wiki/ShBewOHr2ifecQkFPrVlgry6g1d Password: austin2025

@@ -26,7 +26,7 @@ log_file = "../logs/2025-05-30-10-49-18-online-tamer-cumulative-reward.log-zhiha
 # log_file = "../logs/2025-05-30-21-06-47-online-tamer-noisy-cumulative-reward.log"
 
 
-def main(log_file_path=None):
+def main(log_file_path=None, feature_version="v2"):
     if log_file_path is None:
         log_file_path = DEFAULT_LOG_FILE
 
@@ -69,6 +69,8 @@ def main(log_file_path=None):
     oracle_mean = 120.8
     oracle_std = np.sqrt(477.96)
 
+
+        
     # Descriptive labels
     weight_labels = [
         "Dim 1 (# positive left, lower better)",
@@ -78,6 +80,24 @@ def main(log_file_path=None):
         "Dim 5 (will hit +, higher better)",
         "Dim 6 (will hit -, lower better)"
     ]
+    if feature_version == "v3":
+        weight_labels = [
+            "Dim 1 (collision_passenger)",
+            "Dim 2 (collision_obstacle)",
+            "Dim 3 (passenger_proximity_score_delta (1/manhattan distance))",
+            "Dim 4 (obstacle_proximity_score_delta (1/manhattan distance))",
+            "Dim 5 (-)",
+            "Dim 6 (-)"
+        ]
+    if feature_version == "v4":
+        weight_labels = [
+            "Dim 1 (-)",
+            "Dim 2 (-)",
+            "Dim 3 (passenger_proximity_score_delta (1/manhattan distance))",
+            "Dim 4 (obstacle_proximity_score_delta (1/manhattan distance))",
+            "Dim 5 (-)",
+            "Dim 6 (-)"
+        ]
 
     # Create the plot
     fig, axs = plt.subplots(2, 1, figsize=(12, 10), sharex=True)
@@ -102,7 +122,7 @@ def main(log_file_path=None):
     axs[1].grid(True)
 
     plt.tight_layout()
-    plt.show()
+    # plt.show()
 
     # save the plot as a png file
     plt.savefig(f"{log_file_path}.png")
@@ -110,6 +130,7 @@ def main(log_file_path=None):
 
 if __name__ == "__main__":
     log_file_path = sys.argv[1] if len(sys.argv) > 1 else None
-    main(log_file_path)
+    feature_version = sys.argv[2] if len(sys.argv) > 2 else "v2"
+    main(log_file_path, feature_version)
 
 

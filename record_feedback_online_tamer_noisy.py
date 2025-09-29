@@ -145,6 +145,13 @@ def parse_command_line_args(args):
         help='The weight of the agent.'
     )
     
+    parser.add_argument(
+        '--feature_version',
+        type=str,
+        default="v2",
+        help='The feature version of the agent.'
+    )
+    
     parsed_args = parser.parse_args(args)
     
     # Convert seeds string to list of integers
@@ -216,7 +223,10 @@ def create_agent(name, model, dimension, env, reward_mapping=None, **kwargs):
         epsilon_train = kwargs.get('epsilon_train', 0.2)
         epsilon_test = kwargs.get('epsilon_test', 0.1)
         weight = kwargs.get('weight')
-        return OnlineNoisyTAMERAgent(w=weight, feedback_accuracy=feedback_accuracy, negative_feedback_only=negative_feedback_only, alpha=lr, lr_decay=lr_decay, epsilon_train=epsilon_train, epsilon_test=epsilon_test)
+        logfile = kwargs.get('logfile')
+        feature_version = kwargs.get('feature_version', "v2")
+        print(f"feature_version in : {feature_version}")
+        return OnlineNoisyTAMERAgent(w=weight, feedback_accuracy=feedback_accuracy, negative_feedback_only=negative_feedback_only, alpha=lr, lr_decay=lr_decay, epsilon_train=epsilon_train, epsilon_test=epsilon_test, feature_version=feature_version)
 
         # Example command to run the agent:
         # python record_feedback_online_tamer_noisy.py --agent tamer-online-noisy --model tamer_weights_online_noisy.npy --level 8x8-blank.json --num-episodes 1 --feedback-accuracy 0.6 --negative-feedback-only --lr 0.01 --lr-decay 0.998 --epsilon-train 0.2 --epsilon-test 0.1 --weight w1
@@ -343,6 +353,7 @@ def main():
             'epsilon_train': parsed_args.epsilon_train,
             'epsilon_test': parsed_args.epsilon_test,
             'weight': parsed_args.weight,
+            'feature_version': parsed_args.feature_version,
         }
     else:
         kwargs = {}

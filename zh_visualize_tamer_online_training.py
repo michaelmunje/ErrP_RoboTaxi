@@ -225,8 +225,8 @@ class PyGameGUI:
                     # bookkeeping
                     episode_reward += timestep.reward
                     step_counter   += 1
-                    print(f"Step {self.env.timestep_index}: "
-                        f"Cumulative Reward = {episode_reward:.2f}")
+                    # print(f"Step {self.env.timestep_index}: "
+                    #     f"Cumulative Reward = {episode_reward:.2f}")
 
                     # render + small head-motion animation
                     curr_head = list(self.env.snake.head)
@@ -268,7 +268,6 @@ class PyGameGUI:
                             f"{episode_reward:.2f}")
                         episode_rewards.append(episode_reward)
                         print(f"episode_rewards: {episode_rewards}")
-                        time.sleep(1)
                         running = False
                 if RENDER:
                     pygame.display.update()
@@ -317,6 +316,12 @@ if __name__ == '__main__':
         LOG_PATH = args[0]
         RESULT_PATH = LOG_PATH.replace(".log", "-cumulative-reward.log")
         print(f"working on {LOG_PATH}, result will be saved to {RESULT_PATH}")
+    
+    feature_version = "v2"
+    # read the feature version from args
+    if len(args) > 1:
+        feature_version = args[1]
+        print(f"feature version: {feature_version}")
         
     
     # Load the raw environment
@@ -366,15 +371,17 @@ if __name__ == '__main__':
     # find the weights at every 20 steps
     weights_at_steps = []
     # user inputted interventions + noisy interventions
-    second = [0,17,34,52,69,100,127,153,178,200,237,249,265,296,335,347,376,390,402,420,440,462]
+    # second = [0,17,34,52,69,100,127,153,178,200,237,249,265,296,335,347,376,390,402,420,440,462]
     # user inputted interventions
-    first = [i for i in range(0, len(second)*20, 20)]
+    # first = [i for i in range(0, len(second)*20, 20)]
     # for i in range(len(first)):
     #     weights_at_steps.append( (first[i], weights[second[i]]) )
     
-    # plot every 2 steps
-    for i in range(0, len(weights), 2):
+    # plot every 10 steps, or 5 times, whichever is more frequent
+    for i in range(0, len(weights), min(10, len(weights)//5)):
         weights_at_steps.append( (i,weights[i]) )
+    if weights_at_steps[-1][0] != len(weights) - 1:
+        weights_at_steps.append( (len(weights) - 1, weights[-1]) )
     # weights_at_steps.append( (len(weights), weights[-1]) )
     
     # run visualization with the weights
@@ -382,7 +389,7 @@ if __name__ == '__main__':
     seeds = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19]
     for i, w in weights_at_steps:
         # agent = TAMERAgent(w=w)
-        agent = OnlineTAMERAgent(w=w)
+        agent = OnlineTAMERAgent(w=w, feature_version = feature_version)
         agent.no_update = True
         agent.mode = "test"
         gui = PyGameGUI(field_size=8)
