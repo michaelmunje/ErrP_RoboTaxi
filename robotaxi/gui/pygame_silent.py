@@ -1,13 +1,16 @@
 import numpy as np
+from cnbiloop import BCI_tid
 import pygame
 import time
 import random
 import cv2
 import os
 import json
+import csv
 import threading
 import logging
 import sys
+import queue
 
 from robotaxi.agent import HumanAgent
 from robotaxi.gameplay.entities import (CellType, SnakeAction, SnakeDirection, ALL_SNAKE_DIRECTIONS, ALL_SNAKE_ACTIONS, SNAKE_GROW, WALL_WARP, Point)
@@ -59,16 +62,72 @@ class captureThread(threading.Thread):
 
     def stopped(self):
         return self._stop_event.is_set()
+
+class TiDReceiver(threading.Thread):
+    """
+    Continuously reads TiD messages and pushes parsed events into a queue.
+    Produces tuples: (prob:int, t:float)
+    """
+    def __init__(self, bci, out_queue):
+        super().__init__(daemon=True)
+        self.bci = bci
+        self.out_queue = out_queue
+        self._stop = threading.Event()
+        # Make the socket responsive; thread-safe even if blocking
+        try:
+            self.bci.iDsock_bus.settimeout(0.05)  # 50 ms
+        except Exception:
+            pass
+
+    def stop(self):
+        self._stop.set()
+
+    def run(self):
+        # non-blocking/continuous thread
+        while not self._stop.is_set():
+            data = None
+            try:
+                data = self.bci.iDsock_bus.recv(512).decode("utf-8")
+                self.bci.idStreamer_bus.Append(data)
+            except Exception:
+                # timeout or no data; short nap to avoid hot-spinning
+                time.sleep(0.005)
+                continue
+
+            if not data:
+                continue
+
+            # Drain all complete <tobiid .../> packets that arrived in this chunk
+            while self.bci.idStreamer_bus.Has("<tobiid", "/>"):
+                msg = self.bci.idStreamer_bus.Extract("<tobiid", "/>")
+                self.bci.id_serializer_bus.Deserialize(msg)
+                try:
+                    prob = int(self.bci.id_msg_bus.GetEvent()) # ignore malformed payloads
+                    # print("Error probability:" + str(latest_prob))
+                    # clamp to [0,100] defensively
+                    if prob < 0: prob = 0
+                    if prob > 100: prob = 100
+                    self.out_queue.put((prob, time.time()))
+                except Exception:
+                    # ignore malformed payloads
+                    pass
+
+            # Discard any tcstatus noise if present
+            while self.bci.idStreamer_bus.Has("<tcstatus", "/>"):
+                _ = self.bci.idStreamer_bus.Extract("<tcstatus", "/>")
+
         
 class PyGameGUI:
     """ Provides a Snake GUI powered by Pygame. """
 
     FPS_LIMIT = 60
     AI_TIMESTEP_DELAY = 5000
-    AI_TIMESTEP_DELAY = 1000
+    AI_TIMESTEP_DELAY = 2000
+    AI_TIMESTEP_DELAY = 200
     # AI_TIMESTEP_DELAY = 300
     HUMAN_TIMESTEP_DELAY = 5000
-    HUMAN_TIMESTEP_DELAY = 1000
+    HUMAN_TIMESTEP_DELAY = 2000
+    HUMAN_TIMESTEP_DELAY = 200
 
     SNAKE_CONTROL_KEYS = [
         pygame.K_UP,
@@ -77,7 +136,7 @@ class PyGameGUI:
         pygame.K_RIGHT
     ]
 
-    def __init__(self, save_frames=False, field_size=8, test=False, random_seeds=None):
+    def __init__(self, save_frames=False, field_size=8, test=False, random_seeds=None, calibration=False, BCI=False, threshold = 50):
         self.random_seeds = random_seeds or []
         pygame.init()
 
@@ -152,6 +211,28 @@ class PyGameGUI:
         self.num_font = pygame.font.Font("fonts/gyparody_tf.ttf", int(36*(self.CELL_SIZE/40.0))) 
         self.marker_font = pygame.font.Font("fonts/OpenSans-Bold.ttf", int(12*(self.CELL_SIZE/40.0)))
         pygame.display.set_caption('Robotaxi')
+        
+        
+        self._minus_visual_until = 0.0
+        self._plus_visual_until  = 0.0
+        self.button_pulse_ms     = int(os.getenv("BUTTON_PULSE_MS", "150"))
+        
+        scheme = 'bulldozer'
+        if BCI: # decoding
+            print("BCI arguments parsed")
+            self.isLoop=True
+            self.bci = BCI_tid.BciInterface()
+        else: # calibration
+            self.isLoop=False
+            self.bci = None
+
+        self.tid_queue = queue.Queue()
+        self.tid_thread = None
+        self.latest_prob = None
+        self.threshold = threshold
+        if self.isLoop and self.bci is not None:
+            self.tid_thread = TiDReceiver(self.bci, self.tid_queue)
+            self.tid_thread.start()
 
         DEBUG_MODE = int(os.getenv("DEBUG_MODE", "0"))
         if DEBUG_MODE:
@@ -159,6 +240,38 @@ class PyGameGUI:
         else:
             self.parallel = Trigger('ARDUINO')
         self.parallel.init(50)
+        
+        self.use_direct_ErrP_prob = os.environ.get("USE_DIRECT_ERRP_PROB", "False")
+        if self.use_direct_ErrP_prob == "True":
+            print("Using direct error probability")
+        else:
+            print("Default: Not Using direct error probability, Using sign (max_prob > threshold)")
+
+    def sendTiD(self, value):
+        self.bci.id_msg_bus.SetEvent(value)
+        self.bci.iDsock_bus.sendall(str.encode(self.bci.id_serializer_bus.Serialize()))
+
+    def pulse_button(self, which, ms=None):
+        dur = (ms or self.button_pulse_ms) / 1000.0
+        until = time.time() + dur
+        if which == 'minus':
+            self._minus_visual_until = max(self._minus_visual_until, until)
+        elif which == 'plus':
+            self._plus_visual_until  = max(self._plus_visual_until, until)
+
+    
+    def drain_tid_events(self):
+        """
+        Pull all pending TiD events from the queue and return the list.
+        Each item is (prob:int, t:float), where prob is the error probability from decoder in [0,100].
+        """
+        events = []
+        try:
+            while True:
+                events.append(self.tid_queue.get_nowait())
+        except queue.Empty:
+            pass
+        return events
 
     def set_icon_scheme(self, idx):
         scheme = self.car_schemes[idx]
@@ -582,12 +695,20 @@ class PyGameGUI:
         return np.roll(actions, -key_idx)[direction_idx]
 
     def quit_game(self):
+        if self.bci is not None:  # Only send if BCI is active
+            self.sendTiD(20) # signal end of run
         self.env.is_game_over = True
         if self.env.verbose >= 1:
             stats_csv_line = self.env.stats.to_dataframe().to_csv(header=False, index=None)
             print(stats_csv_line, file=self.env.stats_file, end='', flush=True)
         if self.env.verbose >= 2:
             print(self.env.stats, file=self.env.debug_file)
+        if getattr(self, "tid_thread", None):
+            try:
+                self.tid_thread.stop()
+                self.tid_thread.join(timeout=0.5)
+            except Exception:
+                pass
         raise QuitRequestedError
 
     def handle_pause(self):
@@ -627,7 +748,10 @@ class PyGameGUI:
 
     def run_episode(self, collect_feedback=False, participant_idx=None, random_seed=None):
         assert not collect_feedback or participant_idx is not None, "If collect_feedback is True, participant_idx must be specified."
-        feedback_log = []
+        feedback_log = [] # maintained in a per step basis, each step the feedback log is reset
+        detailed_log = [] # maintained during the entire episode
+        minus_button_pressed = False
+        plus_button_pressed = False
         previous_feedback_time = None
         if collect_feedback:
             feedback_font = pygame.font.Font(None, 36)
@@ -653,20 +777,26 @@ class PyGameGUI:
             plus_button_pressed = False
             
         def draw_feedback_buttons():
-            minus_color = (150, 0, 0) if minus_button_pressed else (200, 0, 0)
-            plus_color = (0, 150, 0) if plus_button_pressed else (0, 200, 0)
+            now = time.time()
+            minus_until = getattr(self, "_minus_visual_until", 0.0)
+            plus_until  = getattr(self, "_plus_visual_until",  0.0)
+
+            # pressed if mouse is down OR a pulse is active
+            minus_vis = minus_button_pressed or (now < minus_until)
+            plus_vis  = plus_button_pressed  or (now < plus_until)
+
+            minus_color = (150, 0, 0) if minus_vis else (200, 0, 0)
+            plus_color  = (0, 150, 0)  if plus_vis  else (0, 200, 0)
+
             pygame.draw.rect(self.screen, minus_color, minus_button)
-            pygame.draw.rect(self.screen, plus_color, plus_button)
+            pygame.draw.rect(self.screen, plus_color,  plus_button)
+
             minus_text = feedback_font.render("-", True, (255, 255, 255))
-            plus_text = feedback_font.render("+", True, (255, 255, 255))
-            self.screen.blit(minus_text, (
-                minus_button.centerx - minus_text.get_width() // 2, 
-                minus_button.centery - minus_text.get_height() // 2
-            ))
-            self.screen.blit(plus_text, (
-                plus_button.centerx - plus_text.get_width() // 2, 
-                plus_button.centery - plus_text.get_height() // 2
-            ))
+            plus_text  = feedback_font.render("+", True, (255, 255, 255))
+            self.screen.blit(minus_text, (minus_button.centerx - minus_text.get_width() // 2,
+                                        minus_button.centery - minus_text.get_height() // 2))
+            self.screen.blit(plus_text,  (plus_button.centerx  - plus_text.get_width()  // 2,
+                                        plus_button.centery  - plus_text.get_height()  // 2))
 
         pygame.mouse.set_visible(True)
         global frame_ct
@@ -719,11 +849,7 @@ class PyGameGUI:
                             self.set_icon_scheme(self.selected_icon_scheme) 
                         elif event.key == pygame.K_ESCAPE:
                             raise QuitRequestedError
-                    if event.type == pygame.MOUSEBUTTONDOWN and collect_feedback:
-                        if minus_button.collidepoint(event.pos):
-                            feedback_log.append({"time": time.time(), "reward": -1})
-                        elif plus_button.collidepoint(event.pos):
-                            feedback_log.append({"time": time.time(), "reward": +1})
+
                     if event.type == pygame.QUIT:
                         raise QuitRequestedError
                 pygame.display.update()          
@@ -743,10 +869,87 @@ class PyGameGUI:
 
         running = True
         action_selected = False
-        while running:          
+        
+        def consume_pygame_events_and_update_feedback_log(event, collect_feedback):
+            nonlocal minus_button_pressed, plus_button_pressed
+            if not collect_feedback:
+                return
+
+            if event.type == pygame.MOUSEBUTTONUP or event.type == pygame.JOYBUTTONUP:
+                minus_button_pressed = False # Reset pressed state, which is defined in the outer scope
+                plus_button_pressed = False
+                
+            flag_reward_minus, flag_reward_plus = False, False
+            if event.type == pygame.MOUSEBUTTONDOWN:
+                flag_reward_minus |= (not minus_button_pressed) and minus_button.collidepoint(event.pos)
+                flag_reward_plus  |= (not plus_button_pressed) and plus_button.collidepoint(event.pos)
+            if event.type == pygame.JOYBUTTONDOWN:
+                flag_reward_minus |= (not minus_button_pressed) and (event.button == 4)
+                flag_reward_plus  |= (not plus_button_pressed) and (event.button == 5)
+            # and also keyboard - for minus and = for plus
+            if event.type == pygame.KEYDOWN:
+                flag_reward_minus |= (event.key == pygame.K_MINUS) # This is working
+                flag_reward_plus  |= (event.key == pygame.K_EQUALS) # Using K_EQUALS for the plus key
+                    
+            if flag_reward_minus:
+                feedback_log.append({"time": time.time(), "reward": -1})
+                minus_button_pressed = True
+                self.parallel.signal(104)
+                print(3)
+                
+            if flag_reward_plus:
+                feedback_log.append({"time": time.time(), "reward": +1})
+                plus_button_pressed = True
+                self.parallel.signal(108)
+                print(2)
+        
+        def consume_tid_events_and_update_feedback_log():
+            if not self.isLoop: 
+                # print("to use tid events, we need to be in loop mode, please set self.isLoop to True")
+                return
+            for (prob, tstamp) in self.drain_tid_events():
+                feedback_log.append({"time": time.time(), "reward": 0, "prob": prob, "use_direct_prob": self.use_direct_ErrP_prob})
+                if not self.use_direct_ErrP_prob and prob >= self.threshold:
+                    self.parallel.signal(104) # same as if we find a negative reward
+            
+        def aggregate_feedback_log():
+            # feedback log can be from consume_pygame_events_and_update_feedback_log and consume_tid_events_and_update_feedback_log
+            # they are of different formats and should be consistant throughout
+            # if self.isLoop, the we expect feedback log to have time, reward, prob, use_direct_prob == self.use_direct_ErrP_prob
+            # if not self.isLoop, and collect_feedback is True, the we expect feedback log to have time, reward
+            
+            if self.isLoop:
+                # sanity check
+                for f in feedback_log:
+                    assert f['use_direct_prob'] == self.use_direct_ErrP_prob
+                    assert {"time", "reward", "prob", "use_direct_prob"}.issubset(f.keys())
+                # aggregate
+                if self.use_direct_ErrP_prob:
+                    # outputs -1 to 0
+                    return min(-f['prob']/100 for f in feedback_log) 
+                else:
+                    # negative reward if any prob >= threshold
+                    return -1 if any(f['prob'] >= self.threshold for f in feedback_log) else 0 
+            elif collect_feedback: 
+                # sanity check
+                for f in feedback_log:
+                    assert {"time", "reward"}.issubset(f.keys())
+                # aggregate
+                return np.sign(sum(f['reward'] for f in feedback_log))
+            else:
+                return 0
+                
+        
+        
+        while running:
+            
             frame_ct = self.frame_num
             if not action_selected:
-                action = SnakeAction.MAINTAIN_DIRECTION           
+                action = SnakeAction.MAINTAIN_DIRECTION          
+                
+            # we could also consume tid events later, once per env step, but we might want to do it once per animation step because we want the self.paralle.signal to be timely
+            consume_tid_events_and_update_feedback_log() 
+            
             for event in pygame.event.get():
                 if event.type == pygame.KEYDOWN:
                     if is_human_agent and event.key in self.SNAKE_CONTROL_KEYS:
@@ -757,17 +960,12 @@ class PyGameGUI:
                         self.quit_game()
                 if event.type == pygame.QUIT:
                     self.quit_game()
-                if event.type == pygame.MOUSEBUTTONDOWN and collect_feedback:
-                    if minus_button.collidepoint(event.pos):
-                        feedback_log.append({"time": time.time(), "reward": -1})
-                        minus_button_pressed = True
-                    elif plus_button.collidepoint(event.pos):
-                        feedback_log.append({"time": time.time(), "reward": +1})
-                        plus_button_pressed = True
-                if event.type == pygame.MOUSEBUTTONUP and collect_feedback:
-                    minus_button_pressed = False
-                    plus_button_pressed = False
+                # (2/3) Main loop feedback check (pre-step): on-screen -/+ clicks before environment step
+                consume_pygame_events_and_update_feedback_log(event, collect_feedback)
+                
             self.handle_pause()
+            
+                   
             if self.frame_num == 0 and PLAY_SOUND:
                 pass  # No sound to play
             if self.last_head == [0,0]:
@@ -805,31 +1003,46 @@ class PyGameGUI:
                     if self.agent_name == "tamer-online" or self.agent_name == "tamer-online-noisy":
                         # Get feedbacks from the feedback log that are within timestep_delay of current time, and no earlier than
                         # previous_feedback_time, if previous_feedback_time is not None
-                        if len(feedback_log) > 0:
-                            current_time = time.time()
-                            # Filter feedbacks within timestep_delay and sum their rewards
-                            recent_feedbacks = [
-                                f for f in feedback_log 
-                                # This 1 is what I got from stopwatch, not sure where it comes from, maybe animation delay?
-                                if (current_time - f['time'] <= self.timestep_delay/1000 + 1) and 
-                                   (previous_feedback_time is None or f['time'] > previous_feedback_time)
-                            ]
-                            print(f"recent_feedbacks: {recent_feedbacks}")
-                            if recent_feedbacks:
-                                # Sum all rewards from recent feedbacks
-                                total_reward = sum(f['reward'] for f in recent_feedbacks)
-                                # Get the sign of the total reward
-                                reward_sign = np.sign(total_reward)
-                                action = self.agent.act(timestep_result.observation, reward_sign)
-                                print(f"Using sum of {len(recent_feedbacks)} recent feedbacks, total reward: {total_reward}, sign: {reward_sign}")
-                                # Update previous_feedback_time to the most recent feedback time
-                                previous_feedback_time = max(f['time'] for f in recent_feedbacks)
-                            else:
-                                action = self.agent.act(timestep_result.observation, 0)
-                                print(f"No feedbacks within {self.timestep_delay}ms window")
-                        else:
-                            action = self.agent.act(timestep_result.observation, 0)
+                        feedback = 0
+                        if len(feedback_log) == 0:
                             print("No feedback log available")
+                        else:
+                            feedback = aggregate_feedback_log()
+                            feedback_log = [] # reset the feedback log for each step
+                            print("Aggregated feedback: ", feedback)
+                        
+                        
+                        action = self.agent.act(timestep_result.observation, feedback)
+                        
+                        detailed_log.append({"prev_state": timestep_result.observation, "action": action, "prev_feedback": feedback})
+                        
+                        
+                        
+                        # if len(feedback_log) > 0:
+                        #     current_time = time.time()
+                        #     # Filter feedbacks within timestep_delay and sum their rewards
+                        #     recent_feedbacks = [
+                        #         f for f in feedback_log 
+                        #         # This 1 is what I got from stopwatch, not sure where it comes from, maybe animation delay?
+                        #         if (current_time - f['time'] <= self.timestep_delay/1000 + 1) and 
+                        #            (previous_feedback_time is None or f['time'] > previous_feedback_time)
+                        #     ]
+                        #     print(f"recent_feedbacks: {recent_feedbacks}")
+                        #     if recent_feedbacks:
+                        #         # Sum all rewards from recent feedbacks
+                        #         total_reward = sum(f['reward'] for f in recent_feedbacks)
+                        #         # Get the sign of the total reward
+                        #         reward_sign = np.sign(total_reward)
+                        #         action = self.agent.act(timestep_result.observation, reward_sign)
+                        #         print(f"Using sum of {len(recent_feedbacks)} recent feedbacks, total reward: {total_reward}, sign: {reward_sign}")
+                        #         # Update previous_feedback_time to the most recent feedback time
+                        #         previous_feedback_time = max(f['time'] for f in recent_feedbacks)
+                        #     else:
+                        #         action = self.agent.act(timestep_result.observation, 0)
+                        #         print(f"No feedbacks within {self.timestep_delay}ms window")
+                        # else:
+                        #     action = self.agent.act(timestep_result.observation, 0)
+                        #     print("No feedback log available")
                     else:
                         action = self.agent.act(timestep_result.observation, timestep_result.reward)
                     print(f"timestep_result.reward: {timestep_result.reward}")
@@ -874,6 +1087,8 @@ class PyGameGUI:
                     pygame.display.update()
                     time.sleep(2)
                     self.agent.end_episode()
+                    if self.bci is not None:
+                        self.sendTiD(20)  # signal end of run
                     running = False
                 if self.collaborating_agent is not None and timestep_result_collaborator.is_episode_end:
                     smaller_text_font = pygame.font.Font("fonts/gyparody_hv.ttf", int(36*(self.CELL_SIZE/40.0))) 
@@ -882,6 +1097,8 @@ class PyGameGUI:
                     pygame.display.update()
                     time.sleep(2)
                     self.agent.end_episode()
+                    if self.bci is not None:
+                        self.sendTiD(20)  # signal end of run
                     running = False
             if running:  
                 self.render()
@@ -911,6 +1128,10 @@ class PyGameGUI:
                         self.CELL_SIZE,
                     )
                 for interpolate_idx in range(1, self.intermediate_frames-1):
+                    
+                    # read tid events from buffer and update feedback log
+                    consume_tid_events_and_update_feedback_log()
+                    
                     for event in pygame.event.get():
                         if event.type == pygame.KEYDOWN:
                             if is_human_agent and event.key in self.SNAKE_CONTROL_KEYS:
@@ -922,32 +1143,10 @@ class PyGameGUI:
                                 self.quit_game()
                         if event.type == pygame.QUIT:
                             self.quit_game()
-                        if collect_feedback:
-                            flag_reward_minus, flag_reward_plus = False, False
-                            if event.type == pygame.MOUSEBUTTONDOWN:
-                                flag_reward_minus |= (not minus_button_pressed) and minus_button.collidepoint(event.pos)
-                                flag_reward_plus  |= (not plus_button_pressed) and plus_button.collidepoint(event.pos)
-                            if event.type == pygame.JOYBUTTONDOWN:
-                                flag_reward_minus |= (not minus_button_pressed) and (event.button == 4)
-                                flag_reward_plus  |= (not plus_button_pressed) and (event.button == 5)
-                            # and also keyboard - for minus and = for plus
-                            if event.type == pygame.KEYDOWN:
-                                flag_reward_minus |= (event.key == pygame.K_MINUS) # This is working
-                                flag_reward_plus  |= (event.key == pygame.K_EQUALS) # Using K_EQUALS for the plus key
-                                
-                            if flag_reward_minus:
-                                feedback_log.append({"time": time.time(), "reward": -1})
-                                minus_button_pressed = True
-                                self.parallel.signal(103)
-                                print(3)
-                            if flag_reward_plus:
-                                feedback_log.append({"time": time.time(), "reward": +1})
-                                plus_button_pressed = True
-                                self.parallel.signal(102)
-                                print(2)
-                        if event.type == pygame.MOUSEBUTTONUP or event.type == pygame.JOYBUTTONUP:
-                            minus_button_pressed = False
-                            plus_button_pressed = False
+                        # (3/3) Interpolation loop feedback check (during animation): keyboard -, =; mouse/joystick -/+
+                        consume_pygame_events_and_update_feedback_log(event, collect_feedback)
+                        
+                        
                     self.handle_pause()
                     if self.collaborating_agent is not None:
                         imm_coords = self.transition_animation(imm_coords, x, y, x0, y0, timestep_result.reward, self.curr_icon, interpolate_idx, False, imm_coords_collaborator)
@@ -986,10 +1185,21 @@ class PyGameGUI:
                 self.fps_clock.tick(self.FPS_LIMIT)
         if collect_feedback:
             curr_time = time.strftime("%Y%m%d_%H%M%S")
-            filename = f"{participant_idx}_{curr_time}.json"
-            with open(filename, "w") as feedback_file:
-                json.dump(feedback_log, feedback_file, indent=4)
-
+            filename = f"{participant_idx}_{curr_time}.csv"
+            # with open(filename, "w") as feedback_file:
+            #     json.dump(feedback_log, feedback_file, indent=4)
+            
+            with open(filename, "w", newline="") as detailed_file:
+                writer = csv.writer(detailed_file)
+                writer.writerow(["prev_state", "action", "prev_feedback"])
+                for log in detailed_log:
+                    # prev_state_flat = np.asarray(log['prev_state']).flatten().tolist()
+                    # obs_str = json.dumps(prev_state_flat)
+                    state_2d = np.asarray(log['prev_state'])
+                    row_strings = [''.join(str(int(v)) for v in row) for row in state_2d]
+                    obs_str = json.dumps(row_strings)
+                    writer.writerow([obs_str, log['action'], log['prev_feedback']])
+                
 class Stopwatch(object):
     def __init__(self):
         self.start_time = pygame.time.get_ticks()
