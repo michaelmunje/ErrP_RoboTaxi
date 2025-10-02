@@ -19,6 +19,38 @@ from robotaxi.gui.python_client import Trigger
 
 frame_ct = -1
 
+
+class detailed_logger():
+    """Append-only CSV logger that writes one row per step immediately.
+
+    Produces a file named "{participant_idx}_{YYYYMMDD_HHMMSS}.csv" with header
+    [state, action, feedback]. Each write flushes to disk to persist data
+    incrementally during the episode.
+    """
+    def __init__(self, participant_idx):
+        self._lock = threading.Lock()
+        curr_time = time.strftime("%Y%m%d_%H%M%S")
+        self.filename = f"dl_{participant_idx}_{curr_time}.csv"
+        self._file = open(self.filename, "w", newline="")
+        self._writer = csv.writer(self._file)
+        self._writer.writerow(["state", "action", "feedback"])
+        self._file.flush()
+
+    def write_step(self, observation, action, feedback):
+        with self._lock:
+            state_2d = np.asarray(observation)
+            row_strings = [''.join(str(int(v)) for v in row) for row in state_2d]
+            obs_str = json.dumps(row_strings)
+            self._writer.writerow([obs_str, action, feedback])
+            self._file.flush()
+
+    def close(self):
+        with self._lock:
+            try:
+                self._file.flush()
+            finally:
+                self._file.close()
+
 class captureThread(threading.Thread):
     def __init__(self, threadID, participant='test', data_dir='./user_study_data/', exp_id='collaborative', test=False):  
         super(captureThread, self).__init__()
@@ -128,6 +160,10 @@ class PyGameGUI:
     HUMAN_TIMESTEP_DELAY = 2000
     # HUMAN_TIMESTEP_DELAY = 200
 
+    if os.getenv("FAST_MODE", "0") == "1":
+        AI_TIMESTEP_DELAY = 200
+        HUMAN_TIMESTEP_DELAY = 200
+    
     SNAKE_CONTROL_KEYS = [
         pygame.K_UP,
         pygame.K_LEFT,
@@ -697,6 +733,13 @@ class PyGameGUI:
         if self.bci is not None:  # Only send if BCI is active
             self.sendTiD(20) # signal end of run
         self.env.is_game_over = True
+        # ensure step-wise logger is closed if active
+        if hasattr(self, "_step_logger") and self._step_logger is not None:
+            try:
+                self._step_logger.close()
+            except Exception:
+                pass
+            self._step_logger = None
         if self.env.verbose >= 1:
             stats_csv_line = self.env.stats.to_dataframe().to_csv(header=False, index=None)
             print(stats_csv_line, file=self.env.stats_file, end='', flush=True)
@@ -748,7 +791,7 @@ class PyGameGUI:
     def run_episode(self, collect_feedback=False, participant_idx=None, random_seed=None):
         assert not collect_feedback or participant_idx is not None, "If collect_feedback is True, participant_idx must be specified."
         feedback_log = [] # maintained in a per step basis, each step the feedback log is reset
-        detailed_log = [] # maintained during the entire episode
+        logger = None
         minus_button_pressed = False
         plus_button_pressed = False
         previous_feedback_time = None
@@ -774,6 +817,9 @@ class PyGameGUI:
             )
             minus_button_pressed = False
             plus_button_pressed = False
+            # initialize step-wise CSV logger
+            logger = detailed_logger(participant_idx)
+            self._step_logger = logger
             
         def draw_feedback_buttons():
             now = time.time()
@@ -890,18 +936,21 @@ class PyGameGUI:
                 flag_reward_minus |= (event.key == pygame.K_MINUS) # This is working
                 flag_reward_plus  |= (event.key == pygame.K_EQUALS) # Using K_EQUALS for the plus key
                     
+            # feedback from keypresses or joystick    
             if flag_reward_minus:
-                feedback_log.append({"time": time.time(), "reward": -1})
+                feedback_log.append({"time": time.time(), "reward": -1, "prob": 1, "use_direct_prob": self.use_direct_ErrP_prob})
                 minus_button_pressed = True
                 self.parallel.signal(104)
                 print(3)
-                
+            
+            # feedback from keypresses or joystick    
             if flag_reward_plus:
-                feedback_log.append({"time": time.time(), "reward": +1})
+                feedback_log.append({"time": time.time(), "reward": +1, "prob": 1, "use_direct_prob": self.use_direct_ErrP_prob})
                 plus_button_pressed = True
                 self.parallel.signal(108)
                 print(2)
         
+        # feedback from tid events
         def consume_tid_events_and_update_feedback_log():
             if not self.isLoop: 
                 # print("to use tid events, we need to be in loop mode, please set self.isLoop to True")
@@ -924,6 +973,7 @@ class PyGameGUI:
                     assert {"time", "reward", "prob", "use_direct_prob"}.issubset(f.keys())
                 # aggregate
                 if self.use_direct_ErrP_prob:
+                    print(f"got {len(feedback_log)} feedbacks probabilities")
                     # outputs -1 to 0
                     return min(-f['prob']/100 for f in feedback_log) 
                 else:
@@ -1013,35 +1063,12 @@ class PyGameGUI:
                         
                         action = self.agent.act(timestep_result.observation, feedback)
                         
-                        detailed_log.append({"prev_state": timestep_result.observation, "action": action, "prev_feedback": feedback})
+                        if logger is not None:
+                            logger.write_step(timestep_result.observation, action, feedback)
                         
                         
                         
-                        # if len(feedback_log) > 0:
-                        #     current_time = time.time()
-                        #     # Filter feedbacks within timestep_delay and sum their rewards
-                        #     recent_feedbacks = [
-                        #         f for f in feedback_log 
-                        #         # This 1 is what I got from stopwatch, not sure where it comes from, maybe animation delay?
-                        #         if (current_time - f['time'] <= self.timestep_delay/1000 + 1) and 
-                        #            (previous_feedback_time is None or f['time'] > previous_feedback_time)
-                        #     ]
-                        #     print(f"recent_feedbacks: {recent_feedbacks}")
-                        #     if recent_feedbacks:
-                        #         # Sum all rewards from recent feedbacks
-                        #         total_reward = sum(f['reward'] for f in recent_feedbacks)
-                        #         # Get the sign of the total reward
-                        #         reward_sign = np.sign(total_reward)
-                        #         action = self.agent.act(timestep_result.observation, reward_sign)
-                        #         print(f"Using sum of {len(recent_feedbacks)} recent feedbacks, total reward: {total_reward}, sign: {reward_sign}")
-                        #         # Update previous_feedback_time to the most recent feedback time
-                        #         previous_feedback_time = max(f['time'] for f in recent_feedbacks)
-                        #     else:
-                        #         action = self.agent.act(timestep_result.observation, 0)
-                        #         print(f"No feedbacks within {self.timestep_delay}ms window")
-                        # else:
-                        #     action = self.agent.act(timestep_result.observation, 0)
-                        #     print("No feedback log available")
+                        
                     else:
                         action = self.agent.act(timestep_result.observation, timestep_result.reward)
                     print(f"timestep_result.reward: {timestep_result.reward}")
@@ -1182,22 +1209,9 @@ class PyGameGUI:
                     draw_feedback_buttons()
                 pygame.display.update()
                 self.fps_clock.tick(self.FPS_LIMIT)
-        if collect_feedback:
-            curr_time = time.strftime("%Y%m%d_%H%M%S")
-            filename = f"{participant_idx}_{curr_time}.csv"
-            # with open(filename, "w") as feedback_file:
-            #     json.dump(feedback_log, feedback_file, indent=4)
-            
-            with open(filename, "w", newline="") as detailed_file:
-                writer = csv.writer(detailed_file)
-                writer.writerow(["prev_state", "action", "prev_feedback"])
-                for log in detailed_log:
-                    # prev_state_flat = np.asarray(log['prev_state']).flatten().tolist()
-                    # obs_str = json.dumps(prev_state_flat)
-                    state_2d = np.asarray(log['prev_state'])
-                    row_strings = [''.join(str(int(v)) for v in row) for row in state_2d]
-                    obs_str = json.dumps(row_strings)
-                    writer.writerow([obs_str, log['action'], log['prev_feedback']])
+        if collect_feedback and logger is not None:
+            logger.close()
+            self._step_logger = None
                 
 class Stopwatch(object):
     def __init__(self):

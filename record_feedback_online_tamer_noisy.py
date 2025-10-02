@@ -163,6 +163,13 @@ def parse_command_line_args(args):
         action="store_true",
         help="Enable calibration mode"
     )
+    
+    parser.add_argument(
+        '--threshold',
+        type=float,
+        default=50,
+        help='The probability threshold for user feedback.'
+    )
     parsed_args = parser.parse_args(args)
     
     # Convert seeds string to list of integers
@@ -318,7 +325,7 @@ def play_cli(env, agent, agent_name, num_episodes=1):
     print('Final Score {:.1f} +/- {:.1f}'.format(np.mean(score_stats), np.std(score_stats)))
 
 
-def play_gui(env, agent, agent_name, num_episodes, save_frames, field_size, collaborating_agent, collaborating_agent_name, participant, test=False, random_seeds=None, calibration = False, BCI = False):
+def play_gui(env, agent, agent_name, num_episodes, save_frames, field_size, collaborating_agent, collaborating_agent_name, participant, test=False, random_seeds=None, calibration = False, BCI = False, threshold = 50):
     """
     Play a set of episodes using the specified Snake agent.
     Use the interactive graphical interface.
@@ -332,7 +339,7 @@ def play_gui(env, agent, agent_name, num_episodes, save_frames, field_size, coll
     # Convert single random_seed to list format for backward compatibility
     if random_seeds is None:
         random_seeds = []
-    gui = PyGameGUI(save_frames=save_frames, field_size=field_size, test=test, random_seeds=random_seeds, calibration = calibration, BCI = BCI)
+    gui = PyGameGUI(save_frames=save_frames, field_size=field_size, test=test, random_seeds=random_seeds, calibration = calibration, BCI = BCI, threshold = threshold)
     gui.load_environment(env)
     gui.load_agent(agent, agent_name)
     if collaborating_agent is not None:
@@ -389,7 +396,7 @@ def main():
     if parsed_args.interface == 'cli':
         play_cli(env, agent, parsed_args.agent, num_episodes=parsed_args.num_episodes)
     else:
-        play_gui(env, agent, parsed_args.agent, num_episodes=parsed_args.num_episodes, save_frames=parsed_args.save_frames, field_size=dimension, collaborating_agent=collaborating_agent, collaborating_agent_name=parsed_args.collaborating_agent, participant=parsed_args.participant, test=parsed_args.test_run, random_seeds=parsed_args.seeds, calibration = parsed_args.calibration, BCI = parsed_args.BCI)
+        play_gui(env, agent, parsed_args.agent, num_episodes=parsed_args.num_episodes, save_frames=parsed_args.save_frames, field_size=dimension, collaborating_agent=collaborating_agent, collaborating_agent_name=parsed_args.collaborating_agent, participant=parsed_args.participant, test=parsed_args.test_run, random_seeds=parsed_args.seeds, calibration = parsed_args.calibration, BCI = parsed_args.BCI, threshold = parsed_args.threshold)
 
 if __name__ == '__main__':
     main()

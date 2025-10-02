@@ -388,4 +388,5 @@ def main():
         play_gui(env, agent, parsed_args.agent, num_episodes=parsed_args.num_episodes, save_frames=parsed_args.save_frames, field_size=dimension, collaborating_agent=collaborating_agent, collaborating_agent_name=parsed_args.collaborating_agent, participant=parsed_args.participant, test=parsed_args.test_run, random_seeds=parsed_args.seeds, calibration = parsed_args.calibration, BCI = parsed_args.BCI, threshold = parsed_args.threshold)
 
 if __name__ == '__main__':
+    raise NotImplementedError("Please use the other record_feedback_online_tamer_noisy.py script instead, not this one")
     main()
