@@ -11,6 +11,7 @@ w_map = {
     "w2": np.array([ 0.07768216, -0.09317696, -0.05280239,  0.03182322, -0.02639944, 0.09958436]),
     "w10": np.array([ 0.9894706, -0.1005191, -0.5182143, -0.2420872,  0.3493194, -0.8516584]),
     "w20": np.array([ 0.7768216, -0.9317696, -0.5280239,  0.3182322, -0.2639944, 0.9958436]),
+    "w30": np.array([ 0.7768216, -0.9317696, +0.5280239,  -0.3182322, -0.2639944, 0.9958436]),
 }
 
 
@@ -77,7 +78,45 @@ def compute_delta_features_v3(prev_state, current_state):
     
     return np.array([collision_passenger, collision_obstacle, passenger_proximity_score_delta, obstacle_proximity_score_delta, 0, 0])
 
+def compute_delta_features_v6(prev_state, current_state):
+    """
+    returns 6 dimensions, where all dimensions are 0 except for 2,3, 
+    which are delta min(manhattan_distance to positive target) 
+    and delta min(manhattan_distance to negative target)
+    """
+    previous_passenger_positions = get_passenger_position(prev_state)
+    previous_obstacle_positions = get_obstacle_position(prev_state)
+    assert len(previous_passenger_positions) <= 2, "at most two passengers allowed"
+    assert len(previous_obstacle_positions) <= 2, "at most two obstacles allowed"
+    
+    current_snake_head_position = get_snake_head_position(current_state)
+    assert len(current_snake_head_position) == 1, "Only One Head Allowed"
+    previous_snake_head_position = get_snake_head_position(prev_state)
+    assert len(previous_snake_head_position) == 1, "Only One Head Allowed"
+    
+    current_snake_head_position = current_snake_head_position[0]
+    previous_snake_head_position = previous_snake_head_position[0]
+
+    collision_passenger = int(current_snake_head_position in previous_passenger_positions)
+    collision_obstacle = int(current_snake_head_position in previous_obstacle_positions)
+    
+    passenger_proximity_score_prev = min(manhattan_distance(previous_snake_head_position, p) for p in previous_passenger_positions) if len(previous_passenger_positions) > 0 else 0
+    obstacle_proximity_score_prev = min(manhattan_distance(previous_snake_head_position, o) for o in previous_obstacle_positions) if len(previous_obstacle_positions) > 0 else 0
+    
+    passenger_proximity_score_curr = min(manhattan_distance(current_snake_head_position, p) for p in previous_passenger_positions) if len(previous_passenger_positions) > 0 else 0
+    obstacle_proximity_score_curr = min(manhattan_distance(current_snake_head_position, o) for o in previous_obstacle_positions) if len(previous_obstacle_positions) > 0 else 0
+    
+    passenger_proximity_score_delta = passenger_proximity_score_curr - passenger_proximity_score_prev
+    obstacle_proximity_score_delta = obstacle_proximity_score_curr - obstacle_proximity_score_prev
+    
+    return np.array([0, 0, passenger_proximity_score_delta, obstacle_proximity_score_delta, 0, 0])
+
 def compute_delta_features_v4(prev_state, current_state):
+    """
+    returns 6 dimensions, where all dimensions are 0 except for 2,3, 
+    which are delta sum(1/manhattan_distance to positive target) 
+    and delta sum(1/manhattan_distance to negative target)
+    """
     delta_fn = compute_delta_features_v3(prev_state, current_state)
     delta_fn[0] = 0
     delta_fn[1] = 0
@@ -152,6 +191,11 @@ class TAMERAgent(AgentBase):
         elif self.feature_version == "v4":
             simulated_observation = self.__class__.peek_next_state(observation, action)
             delta_fn = compute_delta_features_v4(observation, simulated_observation)
+            return np.dot(w, delta_fn)
+        
+        elif self.feature_version == "v6":
+            simulated_observation = self.__class__.peek_next_state(observation, action)
+            delta_fn = compute_delta_features_v6(observation, simulated_observation)
             return np.dot(w, delta_fn)
         
         else:
@@ -325,6 +369,8 @@ class TAMERAgent(AgentBase):
     @classmethod
     def simulate_transition(cls, state, action):
         """
+        An older version of the peek_next_state, this should not be used anymore
+        
         Simulate the next state based on the current state and action for the snake in the robottaxi grid.
         Assumes an 8x8 grid with values: 0 (empty), 1 (positive target), 3 (negative target), 4 (head), 5 (body), 6 (wall).
         Coordinate system: rows (x) increase downward (South), columns (y) increase rightward (East).
@@ -332,6 +378,7 @@ class TAMERAgent(AgentBase):
         - If new position hits bounds or wall (6), head and body remain unchanged.
         - If head encounters 1 or 3, overwrites the cell with head (4), leaving reward/penalty handling implicit.
         """
+        raise DeprecationWarning("simulate_transition is deprecated, please use peek_next_state instead")
         grid = copy.deepcopy(state)  # Copy the grid to avoid modifying the original
         rows, cols = grid.shape  # 8x8 grid
 
@@ -403,8 +450,11 @@ class TAMERAgent(AgentBase):
     
 class OnlineTAMERAgent(TAMERAgent):
     """
-    Represent a robottaxi agent that is initialized with a set of weights (could be any initialization), but then updates the weights according user feedbacks and gradient descent/ascent.
-    Since it is an agent in the game and we want to make it such that it can make improvements, we need to make sure that the agent keep a history of the states and actions, so that it can update the weights accordingly.
+    Represent a robottaxi agent that is initialized with a set of weights (could be any initialization), 
+    but then updates the weights according user feedbacks and gradient descent/ascent.
+    Since it is an agent in the game and we want to make it such that it can make improvements, 
+    we need to make sure that the agent keep a history of the states and actions, 
+    so that it can update the weights accordingly.
     """
     def __init__(self, w = None, save_path = "tamer_weights_online.npy", alpha = 0.01, lr_decay = 0.998, feature_version = "v2"):
         """ Alpha is the learning rate for the gradient descent/ascent. """
@@ -507,6 +557,8 @@ class OnlineTAMERAgent(TAMERAgent):
             delta_f = compute_delta_features_v3(self.history[-delay-1][0], self.history[-delay][0])
         elif self.feature_version == "v4":
             delta_f = compute_delta_features_v4(self.history[-delay-1][0], self.history[-delay][0])
+        elif self.feature_version == "v6":
+            delta_f = compute_delta_features_v6(self.history[-delay-1][0], self.history[-delay][0])
         else: 
             raise ValueError(f"Invalid feature version: {self.feature_version}")
         
@@ -535,7 +587,7 @@ class OnlineTAMERAgent(TAMERAgent):
             print(f"f_prev: {f_prev}, f_curr: {f_curr}")
             print("f_prev:", f_prev)
             print("f_curr:", f_curr)
-        if self.feature_version == "v3" or self.feature_version == "v4":
+        if self.feature_version == "v3" or self.feature_version == "v4" or self.feature_version == "v6":
             f_prev = np.zeros(6)
             f_curr = np.zeros(6)
         print(f"Projected Reward: {projected_rew}, user_rew: {user_rew}")
@@ -561,24 +613,27 @@ class OnlineTAMERAgent(TAMERAgent):
             history_str_cleaned = str(self.history[-delay-1]).replace('\n', '') # Replace newline with its literal representation
             f.write(f"[state, action, reward] : {history_str_cleaned}\n")
         return
-
+    
     
 class OnlineNoisyTAMERAgent(OnlineTAMERAgent):
     """ same as OnlineTAMERAgent, but add noise to feedbacks, controlled by feedback_accuracy"""
-    def __init__(self, w = None, save_path = "tamer_weights_online_noisy.npy", alpha = 0.01, feedback_accuracy = 1.0, negative_feedback_only = False, lr_decay = 0.998, epsilon_train = 0.2, epsilon_test = 0.1, feature_version = "v2"):
+    def __init__(self, w = None, save_path = "tamer_weights_online_noisy.npy", alpha = 0.01, negative_feedback_only = False, lr_decay = 0.998, epsilon_train = 0.2, epsilon_test = 0.1, feature_version = "v2", model_noise = "", feedback_tpr = 1.0, feedback_fpr = 1.0):
         super().__init__(w, save_path, alpha, lr_decay, feature_version = feature_version)
-        self.feedback_accuracy = feedback_accuracy
+        self.feedback_tpr = feedback_tpr
+        self.feedback_fpr = feedback_fpr
         self.log_path = f"logs/{datetime.now().strftime('%Y-%m-%d')}-{datetime.now().strftime('%H-%M-%S')}-online-tamer-noisy.log"
         self.log_path_v2 = f"logs/{datetime.now().strftime('%Y-%m-%d')}-{datetime.now().strftime('%H-%M-%S')}-online-tamer-noisy_v2.log"
         self.negative_feedback_only = negative_feedback_only
         self.epsilon_train = epsilon_train
         self.epsilon_test = epsilon_test
+        self.model_noise = model_noise
         
         # write to log all the parameters
         with open(self.log_path_v2, "a") as f:
             f.write(f"logfile: {self.log_path_v2}\n")
             f.write(f"alpha: {alpha}\n")
-            f.write(f"feedback_accuracy: {feedback_accuracy}\n")
+            f.write(f"feedback_tpr: {feedback_tpr}\n")
+            f.write(f"feedback_fpr: {feedback_fpr}\n")
             f.write(f"negative_feedback_only: {negative_feedback_only}\n")
             f.write(f"lr_decay: {lr_decay}\n")
             f.write(f"epsilon_train: {epsilon_train}\n")
@@ -586,14 +641,10 @@ class OnlineNoisyTAMERAgent(OnlineTAMERAgent):
             f.write(f"w: {w}\n")
             f.write(f"feature_version: {feature_version}\n")
             f.write("============\n")
-        
-        
-    # log both the reward and noisy reward (log the noisy reward as normal reward, and log the normal reward as reward_gt)
     
     
     def log_v2(self, previous_state, current_state, previous_action, reward, noisy_reward):
         with open(self.log_path_v2, "a") as f:
-            
             previous_state_str = str(previous_state).replace('\n', ',')
             current_state_str = str(current_state).replace('\n', ',')
             f.write(f"[previous_state, current_state, previous_action, reward_gt, reward_noisy] : {previous_state_str}, {current_state_str}, {previous_action}, {reward}, {noisy_reward}\n")
@@ -612,28 +663,33 @@ class OnlineNoisyTAMERAgent(OnlineTAMERAgent):
         
         
         
-
+        if noisy_reward == -1:
+            if np.random.rand() <= self.feedback_tpr:
+                noisy_reward = reward
+            else:
+                noisy_reward = 0
         if np.random.rand() <= self.feedback_accuracy:
             noisy_reward = reward
         else:
             possible_rewards = [0, 1, -1]
             if self.negative_feedback_only:
                 possible_rewards = [0, -1]
-            if reward not in possible_rewards:
-                print("="*100 + "\n" + "+++++ WARNING +++++" + "\n" + "="*100)
-                print(f"reward {reward} not in possible_rewards {possible_rewards}, skipping update")
-                print("Are you giving positive feedbacks? while the setting is negative_feedback_only?")
-                print("="*100 + "\n" + "+++++ WARNING +++++" + "\n" + "="*100)  
-                if not self.negative_feedback_only:
-                    raise ValueError("reward not in possible_rewards")
             else:
                 possible_rewards.remove(reward)
             noisy_reward = np.random.choice(possible_rewards)
             
+            
+        # if self.model_noise == "GPR":
+            
+        
+        # else:
+        #     assert self.model_noise == "", 'model_noise must be either "GPR" or ""'
+            
         if self.previous_action is None:
             pass
         else:
-            self.history.append((self.previous_state, self.previous_action, noisy_reward, reward)) # state_t, action_t, reward_t, reward_gt)
+            # The reward_t is the noisy reward which will be used by self.update_weights() to update the weights
+            self.history.append((self.previous_state, self.previous_action, noisy_reward, reward)) # state_t, action_t, reward_t, reward_gt) 
             # Note: noisy_reward in the history will be used for weight update, while reward is used for logging
             # print(f"reward appended: {noisy_reward}")
         

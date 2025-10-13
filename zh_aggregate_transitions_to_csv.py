@@ -5,24 +5,7 @@ import re
 from typing import Iterable, List, Tuple
 
 
-def grid_to_row_string_list(grid_str: str) -> str:
-    """Convert a string like
-    [[6 6 6 6 6 6 6 6], [6 1 0 0 0 0 0 6], ...]
-    into
-    ["66666666","61000006",...]
-
-    Returns a JSON-like string suitable for CSV storage; csv.writer will
-    handle escaping of quotes.
-    """
-    # Extract each bracketed row content
-    rows = re.findall(r"\[([^\]]+)\]", grid_str)
-    row_strings: List[str] = []
-    for row in rows:
-        nums = re.findall(r"-?\d+", row)
-        if not nums:
-            continue
-        row_strings.append("".join(nums))
-    return "[\"" + "\",\"".join(row_strings) + "\"]"
+from utils import grid_to_row_string_list
 
 
 def iter_transition_lines(path: str) -> Iterable[Tuple[str, str, int, int, int]]:

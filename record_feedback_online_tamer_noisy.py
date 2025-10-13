@@ -153,9 +153,9 @@ def parse_command_line_args(args):
     )
     
     parser.add_argument(
-    "--BCI",
-    action="store_true",
-    help="Enable BCI mode (receive/send triggers via TiD)"
+        "--BCI",
+        action="store_true",
+        help="Enable BCI mode (receive/send triggers via TiD)"
     )
 
     parser.add_argument(
@@ -234,7 +234,16 @@ def create_agent(name, model, dimension, env, reward_mapping=None, **kwargs):
     if name == "tamer-online-noisy":
         from robotaxi.agent.tamer_agent import OnlineNoisyTAMERAgent
         print("Creating TAMER Online Agent")
-        feedback_accuracy = kwargs.get('feedback_accuracy', 0.6)
+        
+        assert 'feedback_accuracy' in kwargs or ('feedback_tpr' in kwargs and 'feedback_fpr' in kwargs), "either feedback_accuracy or (feedback_tpr and feedback_fpr) must be provided"
+        if 'feedback_accuracy' in kwargs:
+            feedback_tpr = feedback_accuracy
+            feedback_fpr = feedback_accuracy
+        if 'feedback_tpr' in kwargs:
+            feedback_tpr = kwargs.get('feedback_tpr')
+        if 'feedback_fpr' in kwargs:
+            feedback_fpr = kwargs.get('feedback_fpr')
+        
         negative_feedback_only = kwargs.get('negative_feedback_only', False)
         lr = kwargs.get('lr', 0.01)
         lr_decay = kwargs.get('lr_decay', 0.998)
@@ -244,7 +253,7 @@ def create_agent(name, model, dimension, env, reward_mapping=None, **kwargs):
         logfile = kwargs.get('logfile')
         feature_version = kwargs.get('feature_version', "v2")
         print(f"feature_version in : {feature_version}")
-        return OnlineNoisyTAMERAgent(w=weight, feedback_accuracy=feedback_accuracy, negative_feedback_only=negative_feedback_only, alpha=lr, lr_decay=lr_decay, epsilon_train=epsilon_train, epsilon_test=epsilon_test, feature_version=feature_version)
+        return OnlineNoisyTAMERAgent(w=weight, negative_feedback_only=negative_feedback_only, alpha=lr, lr_decay=lr_decay, epsilon_train=epsilon_train, epsilon_test=epsilon_test, feature_version=feature_version, feedback_tpr=feedback_tpr, feedback_fpr=feedback_fpr)
 
         # Example command to run the agent:
         # python record_feedback_online_tamer_noisy.py --agent tamer-online-noisy --model tamer_weights_online_noisy.npy --level 8x8-blank.json --num-episodes 1 --feedback-accuracy 0.6 --negative-feedback-only --lr 0.01 --lr-decay 0.998 --epsilon-train 0.2 --epsilon-test 0.1 --weight w1
