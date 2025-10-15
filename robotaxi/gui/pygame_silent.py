@@ -107,6 +107,7 @@ class TiDReceiver(threading.Thread):
                     # clamp to [0,100] defensively
                     if prob < 0: prob = 0
                     if prob > 100: prob = 100
+                    print(f"TiDReceiver received prob = {prob:.3f} at {time.time():.3f}")
                     self.out_queue.put((prob, time.time()))
                 except Exception:
                     # ignore malformed payloads
@@ -242,9 +243,12 @@ class PyGameGUI:
         
         self.use_direct_ErrP_prob = os.environ.get("USE_DIRECT_ERRP_PROB", "False")
         if self.use_direct_ErrP_prob == "True":
+            self.use_direct_ErrP_prob = True
             print("Using direct error probability")
         else:
             print("Default: Not Using direct error probability, Using sign (max_prob > threshold)")
+            self.use_direct_ErrP_prob = False
+
 
     def sendTiD(self, value):
         self.bci.id_msg_bus.SetEvent(value)
@@ -907,9 +911,15 @@ class PyGameGUI:
                 # print("to use tid events, we need to be in loop mode, please set self.isLoop to True")
                 return
             for (prob, tstamp) in self.drain_tid_events():
+                print(f"[GUI] Queued prob={prob:.3f} for frame {self.frame_num}")
+                print(f"Thr:{self.threshold}")
+                print(f"Prob above threshold: {prob>=self.threshold}")
+                print(f"Env var: {self.use_direct_ErrP_prob}")
                 feedback_log.append({"time": time.time(), "reward": 0, "prob": prob, "use_direct_prob": self.use_direct_ErrP_prob})
                 if not self.use_direct_ErrP_prob and prob >= self.threshold:
+                    
                     self.parallel.signal(104) # same as if we find a negative reward
+                    self.pulse_button('minus')
             
         def aggregate_feedback_log():
             # feedback log can be from consume_pygame_events_and_update_feedback_log and consume_tid_events_and_update_feedback_log
@@ -925,9 +935,11 @@ class PyGameGUI:
                 # aggregate
                 if self.use_direct_ErrP_prob:
                     # outputs -1 to 0
+                    print(f"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA")
                     return min(-f['prob']/100 for f in feedback_log) 
                 else:
                     # negative reward if any prob >= threshold
+                    print("YAYYYYYYYYYYYYYYYYYYYYY")
                     return -1 if any(f['prob'] >= self.threshold for f in feedback_log) else 0 
             elif collect_feedback: 
                 # sanity check
@@ -1006,7 +1018,10 @@ class PyGameGUI:
                         if len(feedback_log) == 0:
                             print("No feedback log available")
                         else:
+                            print(f"[Step {self.frame_num}] Aggregating {len(feedback_log)} TiD events")
                             feedback = aggregate_feedback_log()
+                            # if feedback == -1:
+                            #     self.pulse_button("minus")
                             feedback_log = [] # reset the feedback log for each step
                             print("Aggregated feedback: ", feedback)
                         

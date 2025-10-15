@@ -149,7 +149,7 @@ def parse_command_line_args(args):
     "--BCI",
     action="store_true",
     help="Enable BCI mode (receive/send triggers via TiD)"
-)
+    )
 
     parser.add_argument(
         "--calibration",
@@ -159,8 +159,8 @@ def parse_command_line_args(args):
 
     parser.add_argument(
         '--threshold',
-        type=float,
-        default=0.5,
+        type=int,
+        default=50,
         help='The probability threshold for user feedback.'
     )
     parsed_args = parser.parse_args(args)
@@ -315,7 +315,7 @@ def play_cli(env, agent, agent_name, num_episodes=1):
     print('Final Score {:.1f} +/- {:.1f}'.format(np.mean(score_stats), np.std(score_stats)))
 
 
-def play_gui(env, agent, agent_name, num_episodes, save_frames, field_size, collaborating_agent, collaborating_agent_name, participant, test=False, random_seeds=None, calibration = False, BCI = False, threshold=0.5):
+def play_gui(env, agent, agent_name, num_episodes, save_frames, field_size, collaborating_agent, collaborating_agent_name, participant, test=False, random_seeds=None, calibration = False, BCI = False, threshold=50):
     """
     Play a set of episodes using the specified Snake agent.
     Use the interactive graphical interface.

@@ -619,13 +619,13 @@ class OnlineNoisyTAMERAgent(OnlineTAMERAgent):
             possible_rewards = [0, 1, -1]
             if self.negative_feedback_only:
                 possible_rewards = [0, -1]
-            if reward not in possible_rewards:
-                print("="*100 + "\n" + "+++++ WARNING +++++" + "\n" + "="*100)
-                print(f"reward {reward} not in possible_rewards {possible_rewards}, skipping update")
-                print("Are you giving positive feedbacks? while the setting is negative_feedback_only?")
-                print("="*100 + "\n" + "+++++ WARNING +++++" + "\n" + "="*100)  
-                if not self.negative_feedback_only:
-                    raise ValueError("reward not in possible_rewards")
+            # if reward not in possible_rewards:
+            #     print("="*100 + "\n" + "+++++ WARNING +++++" + "\n" + "="*100)
+            #     print(f"reward {reward} not in possible_rewards {possible_rewards}, skipping update")
+            #     print("Are you giving positive feedbacks? while the setting is negative_feedback_only?")
+            #     print("="*100 + "\n" + "+++++ WARNING +++++" + "\n" + "="*100)  
+            #     if not self.negative_feedback_only:
+            #         raise ValueError("reward not in possible_rewards")
             else:
                 possible_rewards.remove(reward)
             noisy_reward = np.random.choice(possible_rewards)
