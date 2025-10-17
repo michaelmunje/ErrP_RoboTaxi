@@ -8,6 +8,18 @@ from numpy.typing import NDArray
 
 
 
+import argparse
+import sys
+import yaml
+
+def build_args_parser(*, suppress_defaults: bool = False) -> argparse.ArgumentParser:
+    """Create a parser for model/training args."""
+    kw = {"argument_default": argparse.SUPPRESS} if suppress_defaults else {}
+    p = argparse.ArgumentParser(**kw)
+    p.add_argument("--learning_rate", type=float)
+    p.add_argument("--epochs", type=int)
+    p.add_argument("--model_name", type=str)
+    return p
 
 def grid_to_row_string_list(grid_str: str) -> str:
     """Convert a string like
