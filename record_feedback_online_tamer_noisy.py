@@ -218,6 +218,8 @@ def build_args_parser():
                         help='Enable calibration mode.')
     parser.add_argument('--feedback-processor', type=str,
                         help="Feedback preprocessor class name (e.g., 'TINYMLFeedbackPreProcessor').")
+    parser.add_argument('--margin', type=float,
+                        help="Margin for feedback preprocessor.")
 
     # -------- Learning hyperparameters --------
     parser.add_argument('--lr', type=float, help='Learning rate.')

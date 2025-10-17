@@ -31,6 +31,7 @@ threshold: 50                   # probability threshold for user feedback (0~100
 BCI: false                      # enable BCI mode (send/receive triggers via TiD)
 calibration: false              # enable calibration mode
 feedback_processor: CountBasedFeedbackPreProcessor        # e.g., 'TINYMLFeedbackPreProcessor' or null pr 'CountBasedFeedbackPreProcessor'
+margin: 0.00 # the lower the more sensitive, if==0 then very sensitive, recommends 0.03
 
 # -------- Learning hyperparameters --------
 lr: 0.1                        # learning rate

@@ -1155,7 +1155,7 @@ class CountBasedFeedbackPreProcessor(visualizeableFeedbackPreProcessorV4):
                 out = -1.0
             else:
                 out = 0.0
-            fnr = 0.3
+            # fnr = 0.3
             # if p_local_minus1 > fnr:
             #     out = noisy_reward
             

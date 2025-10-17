@@ -567,6 +567,7 @@ class OnlineNoisyTAMERAgent(OnlineTAMERAgent):
         self.feedback_tnr = kwargs['feedback_tnr']
         self.mode = kwargs['mode']
         self.uncertainty_bonus_scale = kwargs['uncertainty_bonus_scale']
+        self.margin = kwargs.get('margin', 0.0)
         self.log_path = f"logs/{datetime.now().strftime('%Y-%m-%d')}-{datetime.now().strftime('%H-%M-%S')}-online-tamer-noisy.log"
         self.log_path_v2 = f"logs/{datetime.now().strftime('%Y-%m-%d')}-{datetime.now().strftime('%H-%M-%S')}-online-tamer-noisy_v2.log"
         self.history = []
@@ -581,7 +582,7 @@ class OnlineNoisyTAMERAgent(OnlineTAMERAgent):
         elif kwargs['feedback_processor'] == "TinyBernoulliFeedbackPreProcessor":
             self.feedback_preprocessor = TinyBernoulliFeedbackPreProcessor(feature_version = self.feature_version, negative_feedback_only = self.negative_feedback_only)
         elif kwargs['feedback_processor'] == "CountBasedFeedbackPreProcessor":
-            self.feedback_preprocessor = CountBasedFeedbackPreProcessor(feature_version = self.feature_version, negative_feedback_only = self.negative_feedback_only)
+            self.feedback_preprocessor = CountBasedFeedbackPreProcessor(feature_version = self.feature_version, negative_feedback_only = self.negative_feedback_only, margin = self.margin)
         
         # write to log all the parameters
         with open(self.log_path_v2, "a") as f:
