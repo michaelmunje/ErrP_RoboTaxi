@@ -12,186 +12,9 @@ from robotaxi.utils.cli import HelpOnFailArgumentParser
 from robotaxi.gameplay.entities import CellType
 
 
-def parse_command_line_args(args):
-    """ Parse command-line arguments and organize them into a single structured object. """
-
-    parser = HelpOnFailArgumentParser(
-        description='Snake AI replay client.',
-        epilog='Example: play.py --agent dqn --model dqn-final.model --level 10x10.json'
-    )
-
-    parser.add_argument(
-        '--interface',
-        type=str,
-        choices=['cli', 'gui'],
-        default='gui',
-        help='Interface mode (command-line or GUI).',
-    )
-    parser.add_argument(
-        '--agent',
-        type=str,
-        default='random',
-        choices=['human', 'dqn', 'random', 'val-itr', 'mixed', 'one-hot-dqn', 'tile-coding', 'reward-learning', 'a2c', 'ppo', "tamer-online", "tamer-online-noisy"],
-        help='Player agent to use.',
-    )
-    parser.add_argument(
-        '--model',
-        type=str,
-        help='File containing a pre-trained agent model.',
-    )
-    parser.add_argument(
-        '--level',
-        type=str,
-        default='./robotaxi/levels/8x8-blank.json',
-        help='JSON file containing a level definition.',
-    )
-    parser.add_argument(
-        '--num-episodes',
-        type=int,
-        default=1,
-        help='The number of episodes to run consecutively.',
-    )
-    parser.add_argument(
-        '--save_frames', 
-        action="store_true", 
-        default=False, 
-        help='save frames as jpg files in screenshots/ folder.'
-    )
-    parser.add_argument(
-        '--stationary', 
-        action="store_true", 
-        default=False, 
-        help='determine whether the environment is stationary'
-    )
-    parser.add_argument(
-        '--collaborating_agent', 
-        type=str,
-        choices=['human', 'dqn', 'random', 'val-itr', 'mixed', 'one-hot-dqn', 'tile-coding', 'reward-learning', 'a2c'],
-        help='Collaborator agent to use.',
-    )
-    parser.add_argument(
-        '--collaborator_model',
-        type=str,
-        help='File containing a pre-trained agent model.',
-    )
-    
-    parser.add_argument(
-        '--participant',
-        type=str,
-        default='test',
-        help='Participant ID.',
-    )
-
-    parser.add_argument(
-        '--test_run', 
-        action="store_true", 
-        default=False, 
-        help='determine whether the environment is stationary'
-    )
-
-    parser.add_argument(
-        '--seeds',
-        type=str,
-        default='42,42,43,44,45,46,47,48,49,50,51,52,53,54,55,56,57,58,59,60',
-        help='Comma-separated list of random seeds for episode objective generation (e.g., "12345,67890,11111"). If empty, random seeds will be generated.'
-    )
-    
-    parser.add_argument(
-        '--negative-feedback-only',
-        action="store_true",
-        default=False,
-        help='Only report negative feedbacks to the agent.'
-    )
-    
-    parser.add_argument(
-        '--feedback-accuracy',
-        type=float,
-        default=1.0,
-        help='The accuracy of the feedback.'
-    )
-    
-    parser.add_argument(
-        '--lr',
-        type=float,
-        default=0.01,
-        help='The learning rate of the agent.'
-    )
-    
-    parser.add_argument(
-        '--lr-decay',
-        type=float,
-        default=0.998,
-        help='The learning rate decay of the agent.'
-    )
-    
-    parser.add_argument(
-        '--epsilon-train',
-        type=float,
-        default=0.2,
-        help='The epsilon train of the agent.'
-    )
-    
-    parser.add_argument(
-        '--epsilon-test',
-        type=float,
-        default=0.1,
-        help='The epsilon test of the agent.'
-    )
-    
-    parser.add_argument(
-        '--weight',
-        type=str,
-        required=True,
-        help='The weight of the agent.'
-    )
-    
-    parser.add_argument(
-        '--feature_version',
-        type=str,
-        default="v2",
-        help='The feature version of the agent.'
-    )
-    
-    parser.add_argument(
-        "--BCI",
-        action="store_true",
-        help="Enable BCI mode (receive/send triggers via TiD)"
-    )
-
-    parser.add_argument(
-        "--calibration",
-        action="store_true",
-        help="Enable calibration mode"
-    )
-    
-    parser.add_argument(
-        '--threshold',
-        type=float,
-        default=50,
-        help='The probability threshold for user feedback.'
-    )
-    parsed_args = parser.parse_args(args)
-    
-    # Convert seeds string to list of integers
-    # if parsed_args.seeds start with "trial", the map it to some predefined seeds
-    if isinstance(parsed_args.seeds, str) and parsed_args.seeds.startswith("trial"):
-        # if it is trial 1, seeds are 1,2,3,4,5,6,7,8,9,10
-        # if it is trial 2, seeds are 11,12,13,14,15,16,17,18,19,20
-        # ...
-        trial_num = int(parsed_args.seeds.split('trial')[1])
-        parsed_args.seeds = [(trial_num-1) * 10 + i for i in range(1, 11)]
-        # example: trial1 -> 1,2,3,4,5,6,7,8,9,10, trial2 -> 11,12,13,14,15,16,17,18,19,20, ...
-    elif isinstance(parsed_args.seeds, str):
-        try:
-            parsed_args.seeds = [int(seed.strip()) for seed in parsed_args.seeds.split(',') if seed.strip()]
-        except ValueError:
-            raise ValueError("Seeds must be a comma-separated list of integers or trial1, trial2, trial3, trial4, trial5, trial6")
-    else:
-        parsed_args.seeds = []
-    
-    print(f"parsed_args.seeds: {parsed_args.seeds}")
-    
-    return parsed_args
+import yaml
+import argparse
+import utils
 
 
 def create_snake_environment(level_filename, stationary, collaboration, test=False, participant=None):
@@ -211,7 +34,7 @@ def load_model(filename):
     return load_model(filename)
 
 
-def create_agent(name, model, dimension, env, reward_mapping=None, **kwargs):
+def create_agent(name, tamer_kwargs=None):
     """
     Create a specific type of Snake AI agent.
     
@@ -225,62 +48,30 @@ def create_agent(name, model, dimension, env, reward_mapping=None, **kwargs):
 
     from robotaxi.agent import DeepQNetworkAgent, HumanAgent, RandomActionAgent, ValueIterationAgent, MixedActionAgent, OneHotDQNAgent, TileCodingAgent #, A2CAgent
 
-    if name == 'human':
-        return HumanAgent()
-    if name == "tamer-online":
-        from robotaxi.agent.tamer_agent import OnlineTAMERAgent
-        print("Creating TAMER Online Agent")
-        return OnlineTAMERAgent()
     if name == "tamer-online-noisy":
         from robotaxi.agent.tamer_agent import OnlineNoisyTAMERAgent
         print("Creating TAMER Online Agent")
-        
-        assert 'feedback_accuracy' in kwargs or ('feedback_tpr' in kwargs and 'feedback_fpr' in kwargs), "either feedback_accuracy or (feedback_tpr and feedback_fpr) must be provided"
-        if 'feedback_accuracy' in kwargs:
-            feedback_tpr = feedback_accuracy
-            feedback_fpr = feedback_accuracy
-        if 'feedback_tpr' in kwargs:
-            feedback_tpr = kwargs.get('feedback_tpr')
-        if 'feedback_fpr' in kwargs:
-            feedback_fpr = kwargs.get('feedback_fpr')
-        
-        negative_feedback_only = kwargs.get('negative_feedback_only', False)
-        lr = kwargs.get('lr', 0.01)
-        lr_decay = kwargs.get('lr_decay', 0.998)
-        epsilon_train = kwargs.get('epsilon_train', 0.2)
-        epsilon_test = kwargs.get('epsilon_test', 0.1)
-        weight = kwargs.get('weight')
-        logfile = kwargs.get('logfile')
-        feature_version = kwargs.get('feature_version', "v2")
-        print(f"feature_version in : {feature_version}")
-        return OnlineNoisyTAMERAgent(w=weight, negative_feedback_only=negative_feedback_only, alpha=lr, lr_decay=lr_decay, epsilon_train=epsilon_train, epsilon_test=epsilon_test, feature_version=feature_version, feedback_tpr=feedback_tpr, feedback_fpr=feedback_fpr)
-
+        return OnlineNoisyTAMERAgent(**tamer_kwargs)
         # Example command to run the agent:
         # python record_feedback_online_tamer_noisy.py --agent tamer-online-noisy --model tamer_weights_online_noisy.npy --level 8x8-blank.json --num-episodes 1 --feedback-accuracy 0.6 --negative-feedback-only --lr 0.01 --lr-decay 0.998 --epsilon-train 0.2 --epsilon-test 0.1 --weight w1
-    if name == 'dqn':
-        if model is None:
-            raise ValueError('A model file is required for a DQN agent.')
-        return DeepQNetworkAgent(model=model, memory_size=-1, num_last_frames=4)
-    if name == 'one-hot-dqn':
-        if model is None:
-            raise ValueError('A model file is required for an one-hot DQN agent.')
-        return OneHotDQNAgent(model=model, memory_size=1000, channels=6)
+    
+    if name == 'human':
+        return HumanAgent()
+    
+    if name == "tamer-online":
+        raise ValueError("this TAMER Online Agent is not supported anymore")
+        # from robotaxi.agent.tamer_agent import OnlineTAMERAgent
+        # print("Creating TAMER Online Agent")
+        # return OnlineTAMERAgent()
+        
     if name == 'random':
         return RandomActionAgent()
-    if name == 'val-itr':
-        return ValueIterationAgent(grid_size=dimension, env=env, reward_mapping=reward_mapping)
-    if name == 'mixed':
-        return MixedActionAgent(grid_size=dimension, env=env)
-    if name == 'tile-coding':
-        return TileCodingAgent(weights="tile_coding_weights_660.log")
-    if name == 'reward-learning':
-        return RewardLearningAgent()
-    if name == 'a2c':
-        return A2CAgent(grid_size=dimension, env=env)
+    
     if name == 'ppo':
         # from robotaxi.agent import PPOAgent
         from robotaxi.agent.ppo_agent import PPOAgent
         return PPOAgent(model_path="ppo_robottaxi.zip")
+    
     raise KeyError(f'Unknown agent type: "{name}"')
 
 
@@ -358,33 +149,168 @@ def play_gui(env, agent, agent_name, num_episodes, save_frames, field_size, coll
     if collaborating_agent is not None:
         print('Final Score {:.1f} '.format(env.stats.sum_episode_rewards+env.stats_collaborator.sum_episode_rewards))
 
-def main():
-    parsed_args = parse_command_line_args(sys.argv[1:])
+def build_args_parser():
+    """
+    Schema-only parser that matches config.yaml.
+    No defaults here; YAML provides them.
+    Unset CLI args are suppressed from the Namespace.
+    """
+    parser = argparse.ArgumentParser(
+        description='Snake AI replay client.',
+        epilog='Example: play.py --agent dqn --model dqn-final.model --level 10x10.json',
+        argument_default=argparse.SUPPRESS,  # 🔑 suppress attributes not passed on CLI
+    )
+
+    # -------- Interface & run control --------
+    parser.add_argument('--interface', type=str, choices=['cli', 'gui'],
+                        help='Interface mode (command-line or GUI).')
+    parser.add_argument('--agent', type=str,
+                        choices=['human', 'dqn', 'random', 'val-itr', 'mixed',
+                                 'one-hot-dqn', 'tile-coding', 'reward-learning',
+                                 'a2c', 'ppo', 'tamer-online', 'tamer-online-noisy'],
+                        help='Player agent to use.')
+    parser.add_argument('--model', type=str,
+                        help='Path to a pre-trained agent model.')
+    parser.add_argument('--level', type=str,
+                        help='JSON file containing a level definition.')
+    parser.add_argument('--num-episodes', type=int,
+                        help='Number of episodes to run consecutively.')
+    parser.add_argument('--save_frames', action='store_true',
+                        default=argparse.SUPPRESS,
+                        help='Save frames as JPG files in screenshots/ folder.')
+    parser.add_argument('--stationary', action='store_true',
+                        default=argparse.SUPPRESS,
+                        help='Whether the environment is stationary.')
+    parser.add_argument('--participant', type=str,
+                        help='Participant ID.')
+    parser.add_argument('--test_run', action='store_true',
+                        default=argparse.SUPPRESS,
+                        help='Whether this is a test-only run.')
+    parser.add_argument('--seeds', type=str,
+                        help='Comma-separated random seeds string.')
+
+    # -------- Collaborator settings --------
+    parser.add_argument('--collaborating_agent', type=str,
+                        choices=['human', 'dqn', 'random', 'val-itr', 'mixed',
+                                 'one-hot-dqn', 'tile-coding', 'reward-learning', 'a2c'],
+                        help='Collaborator agent to use.')
+    parser.add_argument('--collaborator_model', type=str,
+                        help='Path to a pre-trained collaborator model.')
+
+    # -------- Feedback / human-in-the-loop / BCI --------
+    parser.add_argument('--negative-feedback-only', '--negative_feedback_only',
+                        dest='negative_feedback_only',
+                        action='store_true', default=argparse.SUPPRESS,
+                        help='Only report negative feedback to the agent.')
+    parser.add_argument('--feedback-accuracy', type=float,
+                        help='Global feedback accuracy (if used).')
+    parser.add_argument('--feedback-tpr', type=float,
+                        help='True positive rate for feedback.')
+    parser.add_argument('--feedback-tnr', type=float,
+                        help='True negative rate for feedback.')
+    parser.add_argument('--threshold', type=float,
+                        help='Probability threshold (0–100) for user feedback.')
+    parser.add_argument('--BCI', action='store_true',
+                        default=argparse.SUPPRESS,
+                        help='Enable BCI mode (send/receive triggers via TiD).')
+    parser.add_argument('--calibration', action='store_true',
+                        default=argparse.SUPPRESS,
+                        help='Enable calibration mode.')
+    parser.add_argument('--feedback-processor', type=str,
+                        help="Feedback preprocessor class name (e.g., 'TINYMLFeedbackPreProcessor').")
+
+    # -------- Learning hyperparameters --------
+    parser.add_argument('--lr', type=float, help='Learning rate.')
+    parser.add_argument('--lr-decay', type=float, help='Learning rate decay.')
+    parser.add_argument('--epsilon-train', type=float, help='Epsilon during training.')
+    parser.add_argument('--epsilon-test', type=float, help='Epsilon during evaluation.')
+    parser.add_argument('--uncertainty-bonus-scale', type=float,
+                        help='Scale for uncertainty exploration bonus.')
+
+    # -------- Weights / features / modes --------
+    parser.add_argument('--weight', type=str,
+                        help="Path or identifier to agent's weight.")
+    parser.add_argument('--feature_version', type=str,
+                        help='Feature set version (e.g., v2, v4).')
+    parser.add_argument('--mode', type=str,
+                        help="Run mode: e.g., 'train', 'eval', 'replay'.")
+
+    # -------- Paths --------
+    parser.add_argument('--save_path', type=str,
+                        help='Where to save logs/checkpoints/outputs.')
+
+    return parser
+
+
+def main(argv=None):
+    argv = argv if argv is not None else sys.argv[1:]
+    
+    # 1) Parse only control flags first: --config and --overwrite
+    ctrl = argparse.ArgumentParser(add_help=True)
+    ctrl.add_argument("--config", type=str, required=True, help="Path to YAML config")
+    ctrl.add_argument("--overwrite", action="store_true",
+                      help="Allow CLI to overwrite conflicting YAML values")
+    ctrl_args, remaining_args = ctrl.parse_known_args()
+    
+    with open(ctrl_args.config, "r") as f:
+        yaml_cfg = yaml.safe_load(f) or {}
+    
+    cli_only_parser = build_args_parser()
+    cli_ns, extra = cli_only_parser.parse_known_args(remaining_args)
+    if extra:
+        # If you expect no extras, you can error out here
+        ctrl.error(f"Unrecognized arguments: {' '.join(extra)}")
+        
+    cli_args = vars(cli_ns)           # only explicitly provided CLI keys
+    allowed_keys = {a.dest for a in build_args_parser()._actions if a.dest != "help"}
+
+    # 4) Warn on unknown YAML keys
+    unknown_yaml = set(yaml_cfg) - allowed_keys
+    if unknown_yaml:
+        print(f"[WARN] Unknown YAML keys ignored: {sorted(unknown_yaml)}", file=sys.stderr)
+
+    # 5) Start from YAML (primary), then merge CLI with conflict detection
+    final_cfg = {k: v for k, v in yaml_cfg.items() if k in allowed_keys}
+    conflicts = {}
+
+    for k, v_cli in cli_args.items():
+        if k in final_cfg and final_cfg[k] != v_cli:
+            if not ctrl_args.overwrite:
+                conflicts[k] = (final_cfg[k], v_cli)
+            else:
+                final_cfg[k] = v_cli
+        else:
+            # Not present in YAML, or same value → just set it
+            final_cfg[k] = v_cli
+
+    if conflicts:
+        lines = ["Conflict detected between YAML and CLI (use --overwrite to allow):"]
+        for k, (yval, cval) in conflicts.items():
+            lines.append(f"  {k}: YAML={yval!r}  CLI={cval!r}")
+        ctrl.error("\n".join(lines))
+
+    # 6) At this point final_cfg is resolved under your policy
+    print("Final configuration:")
+    for k in sorted(final_cfg):
+        print(f"{k}: {final_cfg[k]}")
+    
 
     if not os.path.exists('./csv'): os.makedirs('./csv')
     if not os.path.exists('./log'): os.makedirs('./log')
-
+    
+    final_cfg['seeds'] = [int(seed.strip()) for seed in final_cfg['seeds'].split(',') if seed.strip()]
+    parsed_args = utils.to_namespace(final_cfg)
+    
     collaboration = False if parsed_args.collaborating_agent is None else True
-    if collaboration: parsed_args.level = 'robotaxi/levels/8x8-blank-collaboration.json'
-
     env = create_snake_environment(parsed_args.level, parsed_args.stationary, collaboration, parsed_args.test_run, participant=parsed_args.participant)
     model = load_model(parsed_args.model) if parsed_args.model is not None else None
     dimension = int(parsed_args.level.split('/')[-1].split('x')[0])
     
     if parsed_args.agent == "tamer-online-noisy":
-        kwargs = {
-            'feedback_accuracy': parsed_args.feedback_accuracy,
-            'negative_feedback_only': parsed_args.negative_feedback_only,
-            'lr': parsed_args.lr,
-            'lr_decay': parsed_args.lr_decay,
-            'epsilon_train': parsed_args.epsilon_train,
-            'epsilon_test': parsed_args.epsilon_test,
-            'weight': parsed_args.weight,
-            'feature_version': parsed_args.feature_version,
-        }
+        tamer_kwargs = final_cfg
     else:
-        kwargs = {}
-    agent = create_agent(parsed_args.agent, model, dimension, env, **kwargs)
+        tamer_kwargs = None
+    agent = create_agent(parsed_args.agent, tamer_kwargs)
     print(f"Agent: {agent}")
     collaborator_model = load_model(parsed_args.collaborator_model) if parsed_args.collaborator_model is not None else None
     reward_mapping = {
@@ -399,7 +325,9 @@ def main():
                 CellType.PIT: 0,
                 CellType.WALL: -100,
             }
-    collaborating_agent = create_agent(parsed_args.collaborating_agent, collaborator_model, dimension, env, reward_mapping=reward_mapping) if collaboration else None
+    
+    # collaborating_agent = create_agent(parsed_args.collaborating_agent, collaborator_model, dimension, env, reward_mapping=reward_mapping) if collaboration else None
+    collaborating_agent = None
     print(f"Collaborating Agent: {parsed_args.collaborating_agent}")
     print(f"parsed_args.interface: {parsed_args.interface}")
     if parsed_args.interface == 'cli':

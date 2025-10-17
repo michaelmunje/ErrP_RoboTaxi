@@ -3,7 +3,43 @@ from robotaxi.agent import AgentBase
 from robotaxi.gameplay.wrappers import preprocess_observation_tamer
 import copy
 from datetime import datetime
+from robotaxi.agent.feedback_utils import UserSignalMixer, DiscreteNegativeOnlySignalMixer
+from robotaxi.agent.feedback_utils import FeedbackPreProcessor, TINYMLFeedbackPreProcessor, GPPFeedbackPreProcessor, TinyBernoulliFeedbackPreProcessor, CountBasedFeedbackPreProcessor
 
+from robotaxi.agent.game_feature_utils import compute_delta_features_v4, compute_delta_features_v6
+
+
+# Utility: reclaim focus for pygame window after other GUI activity
+def reclaim_pygame_focus() -> None:
+    try:
+        import pygame
+        import os
+        import ctypes
+        # Ensure event queue is processed
+        try:
+            pygame.event.pump()
+        except Exception:
+            pass
+        # Avoid resetting display mode; it can change flags (e.g., OPENGL) and break update()
+        # X11-specific raise/focus (Linux)
+        try:
+            info = pygame.display.get_wm_info()
+            display = info.get("display")
+            window = info.get("window")
+            if display and window and os.name == "posix":
+                try:
+                    x11 = ctypes.cdll.LoadLibrary("libX11.so.6")
+                    x11.XRaiseWindow(display, window)
+                    # 1 == RevertToPointerRoot per X11
+                    x11.XSetInputFocus(display, window, 1, 0)
+                    x11.XFlush(display)
+                except Exception:
+                    pass
+        except Exception:
+            pass
+    except Exception:
+        # Pygame not available or environment cannot raise focus; ignore silently
+        pass
 
 # initialization w maps
 w_map = {
@@ -14,130 +50,34 @@ w_map = {
     "w30": np.array([ 0.7768216, -0.9317696, +0.5280239,  -0.3182322, -0.2639944, 0.9958436]),
 }
 
-
-# class CellType(object):
-#     """ Defines all types of cells that can be found in the game. """
-
-#     EMPTY = 0
-#     GOOD_FRUIT = 1
-#     BAD_FRUIT = 2
-#     LAVA = 3
-#     SNAKE_HEAD = 4
-#     SNAKE_BODY = 5
-#     WALL = 6
-#     PIT = 7
-#     COLLABORATOR_HEAD = 8
-#     COLLABORATOR_BODY = 9
-
-# prev_state and current_state are 8x8 numpy arrays
-
-def manhattan_distance(pos2d_1, pos2d_2):
-    return abs(pos2d_1[0] - pos2d_2[0]) + abs(pos2d_1[1] - pos2d_2[1])
-
-def inverse_manhattan_distance(pos2d_1, pos2d_2, epsilon = 1):
-    return 1 / (abs(pos2d_1[0] - pos2d_2[0]) + abs(pos2d_1[1] - pos2d_2[1]) + epsilon)
-
-def get_pos_tuple_where(state, value):
-    tmp =  np.where(state == value) # (array([2]), array([2])) or (array([2,3]), array([2,3]))
-    return list(zip(tmp[0].tolist(), tmp[1].tolist())) # [(1, 2), (2, 2)]
-
-def get_snake_head_position(state): # return a list of tuples of length 1
-    return get_pos_tuple_where(state, 4)
-
-def get_passenger_position(state): # return a list of tuples of length 0-2 inclusive
-    return get_pos_tuple_where(state, 1)
-
-def get_obstacle_position(state): # return a list of tuples of length 0-2 inclusive
-    return get_pos_tuple_where(state, 3)
-
-def compute_delta_features_v3(prev_state, current_state):
-    previous_passenger_positions = get_passenger_position(prev_state)
-    previous_obstacle_positions = get_obstacle_position(prev_state)
-    assert len(previous_passenger_positions) <= 2, "at most two passengers allowed"
-    assert len(previous_obstacle_positions) <= 2, "at most two obstacles allowed"
-    
-    current_snake_head_position = get_snake_head_position(current_state)
-    assert len(current_snake_head_position) == 1, "Only One Head Allowed"
-    previous_snake_head_position = get_snake_head_position(prev_state)
-    assert len(previous_snake_head_position) == 1, "Only One Head Allowed"
-    
-    current_snake_head_position = current_snake_head_position[0]
-    previous_snake_head_position = previous_snake_head_position[0]
-
-    collision_passenger = int(current_snake_head_position in previous_passenger_positions)
-    collision_obstacle = int(current_snake_head_position in previous_obstacle_positions)
-    
-    passenger_proximity_score_prev = sum(inverse_manhattan_distance(previous_snake_head_position, p) for p in previous_passenger_positions)
-    obstacle_proximity_score_prev = sum(inverse_manhattan_distance(previous_snake_head_position, o) for o in previous_obstacle_positions)
-    
-    passenger_proximity_score_curr = sum(inverse_manhattan_distance(current_snake_head_position, p) for p in previous_passenger_positions)
-    obstacle_proximity_score_curr = sum(inverse_manhattan_distance(current_snake_head_position, o) for o in previous_obstacle_positions)
-    
-    passenger_proximity_score_delta = passenger_proximity_score_curr - passenger_proximity_score_prev
-    obstacle_proximity_score_delta = obstacle_proximity_score_curr - obstacle_proximity_score_prev
-    
-    return np.array([collision_passenger, collision_obstacle, passenger_proximity_score_delta, obstacle_proximity_score_delta, 0, 0])
-
-def compute_delta_features_v6(prev_state, current_state):
-    """
-    returns 6 dimensions, where all dimensions are 0 except for 2,3, 
-    which are delta min(manhattan_distance to positive target) 
-    and delta min(manhattan_distance to negative target)
-    """
-    previous_passenger_positions = get_passenger_position(prev_state)
-    previous_obstacle_positions = get_obstacle_position(prev_state)
-    assert len(previous_passenger_positions) <= 2, "at most two passengers allowed"
-    assert len(previous_obstacle_positions) <= 2, "at most two obstacles allowed"
-    
-    current_snake_head_position = get_snake_head_position(current_state)
-    assert len(current_snake_head_position) == 1, "Only One Head Allowed"
-    previous_snake_head_position = get_snake_head_position(prev_state)
-    assert len(previous_snake_head_position) == 1, "Only One Head Allowed"
-    
-    current_snake_head_position = current_snake_head_position[0]
-    previous_snake_head_position = previous_snake_head_position[0]
-
-    collision_passenger = int(current_snake_head_position in previous_passenger_positions)
-    collision_obstacle = int(current_snake_head_position in previous_obstacle_positions)
-    
-    passenger_proximity_score_prev = min(manhattan_distance(previous_snake_head_position, p) for p in previous_passenger_positions) if len(previous_passenger_positions) > 0 else 0
-    obstacle_proximity_score_prev = min(manhattan_distance(previous_snake_head_position, o) for o in previous_obstacle_positions) if len(previous_obstacle_positions) > 0 else 0
-    
-    passenger_proximity_score_curr = min(manhattan_distance(current_snake_head_position, p) for p in previous_passenger_positions) if len(previous_passenger_positions) > 0 else 0
-    obstacle_proximity_score_curr = min(manhattan_distance(current_snake_head_position, o) for o in previous_obstacle_positions) if len(previous_obstacle_positions) > 0 else 0
-    
-    passenger_proximity_score_delta = passenger_proximity_score_curr - passenger_proximity_score_prev
-    obstacle_proximity_score_delta = obstacle_proximity_score_curr - obstacle_proximity_score_prev
-    
-    return np.array([0, 0, passenger_proximity_score_delta, obstacle_proximity_score_delta, 0, 0])
-
-def compute_delta_features_v4(prev_state, current_state):
-    """
-    returns 6 dimensions, where all dimensions are 0 except for 2,3, 
-    which are delta sum(1/manhattan_distance to positive target) 
-    and delta sum(1/manhattan_distance to negative target)
-    """
-    delta_fn = compute_delta_features_v3(prev_state, current_state)
-    delta_fn[0] = 0
-    delta_fn[1] = 0
-    return delta_fn
-
-def compute_delta_features_v2(prev_state, current_state):
-    old_fn = preprocess_observation_tamer(observation)
-    new_fn = preprocess_observation_tamer(simulated_observation)
-    new_fn, old_fn = handle_collision(new_fn, old_fn)
-    delta_fn = new_fn - old_fn
-    return np.array(delta_fn)
-
-
-def handle_collision(f_curr, f_prev):
-    if f_curr[0] < f_prev[0]: # crash happened
-        f_curr[2] = 0
-        f_curr[4] = 0
-    if f_curr[1] < f_prev[1]: 
-        f_curr[3] = 0
-        f_curr[5] = 0
-    return f_curr, f_prev
+def handle_initial_weights(w):
+    if w is None: 
+        # initialize w to be flat 6 dimensional vector, between -0.1 and 0.1
+        w = np.random.uniform(-0.1, 0.1, 6)
+        # fixed starting point 1
+        
+    # if w is an instance of string
+    if isinstance(w, str):
+        # if the string is one of w1, w2, map it to the corresponding w
+        if w in w_map:
+            w_key = w
+            w = w_map[w_key]
+            print(f"using predefined {w_key} initialized to {w}")
+            # now w is a numpy array
+        
+        # try to parse str to an array with 6 elements
+        else:
+            try:
+                w = np.array(eval(w))
+                assert w.shape == (6,), "w must be a 6 dimensional vector"
+            except:
+                raise ValueError(f"w must be a 6 dimensional vector or one of {w_map.keys()}")
+        
+    # if w is a list, assert it is 6 dimensional, and convert it to a numpy array
+    if isinstance(w, list):
+        w = np.array(w)
+        
+    return w
 
 class TAMERAgent(AgentBase):
     """Represents a robottaxi agent powered by a pre-trained TAMER reward model."""
@@ -456,50 +396,28 @@ class OnlineTAMERAgent(TAMERAgent):
     we need to make sure that the agent keep a history of the states and actions, 
     so that it can update the weights accordingly.
     """
-    def __init__(self, w = None, save_path = "tamer_weights_online.npy", alpha = 0.01, lr_decay = 0.998, feature_version = "v2"):
+    def __init__(self, w = None, save_path = "tamer_weights_online.npy", lr = 0.01, lr_decay = 0.998, feature_version = "v2", no_log = False):
         """ Alpha is the learning rate for the gradient descent/ascent. """
-        if w is None: 
-            # initialize w to be flat 6 dimensional vector, between -0.1 and 0.1
-            w = np.random.uniform(-0.1, 0.1, 6)
-            # fixed starting point 1
-            
-        # if w is an instance of string
-        if isinstance(w, str):
-            # if the string is one of w1, w2, map it to the corresponding w
-            if w in w_map:
-                w_key = w
-                w = w_map[w_key]
-                print(f"using predefined {w_key} initialized to {w}")
-                # now w is a numpy array
-            
-            # try to parse str to an array with 6 elements
-            else:
-                try:
-                    w = np.array(eval(w))
-                    assert w.shape == (6,), "w must be a 6 dimensional vector"
-                except:
-                    raise ValueError(f"w must be a 6 dimensional vector or one of {w_map.keys()}")
-            
-        # if w is a list, assert it is 6 dimensional, and convert it to a numpy array
-        if isinstance(w, list):
-            w = np.array(w)
+        w = handle_initial_weights(w)
         
         # assert w is a 6 dimensional vector
         assert w.shape == (6,), "w must be a 6 dimensional vector"
         super().__init__(w, save_path, feature_version = feature_version)
         print(f"feature_version in OnlineTAMERAgent.__init__: {feature_version}")
         self.history = [] # history store the (state_0, action_0, reward_0) (state_1, action_1, reward_1) ...
-        self.alpha = alpha
+        self.lr = lr
         self.mode = "train"
         self.no_update = False
         # create a logging path to logs/<yyyy-mm-dd>-<hh-mm-ss>-online-tamer.log
         from datetime import datetime
         self.log_path = f"logs/{datetime.now().strftime('%Y-%m-%d')}-{datetime.now().strftime('%H-%M-%S')}-online-tamer.log"
         self.lr_decay = lr_decay
+        if no_log:
+            self.log_path = None
         
     def begin_episode(self):
         super().begin_episode()
-        self.history = []
+        # self.history = []
         self.previous_action = None
         self.previous_state = None
     
@@ -529,9 +447,9 @@ class OnlineTAMERAgent(TAMERAgent):
         """
         Update the tamer weights according to the most recent step in history of the states and actions. 
         """
-        if self.no_update:
+        if self.mode == "eval":
             return
-        print(f"Updating weights with history.. history length: {len(self.history)}")
+        # print(f"Updating weights with history.. history length: {len(self.history)}")
         if len(self.history) < 3:
             return
         
@@ -569,11 +487,11 @@ class OnlineTAMERAgent(TAMERAgent):
         
         error = user_rew - projected_rew
         if user_rew == 0:
-            print("user_rew is 0, skipping update")
+            # print("user_rew is 0, skipping update")
             return
         
         # update the weights
-        update_to_apply = self.alpha * error * delta_f
+        update_to_apply = self.lr * error * delta_f
         # multiply the first two weights by 10 # because more signal when the agent is approaching the target, then encounting the target
         # TODO: I suspect that this helps with faster convergence, but I am not sure -- Zhihan
         
@@ -581,7 +499,7 @@ class OnlineTAMERAgent(TAMERAgent):
         self.w += update_to_apply
         # TODO: For debugging, set the last two weights to be 0
         # self.w[-2:] = 0
-        self.alpha *= self.lr_decay # decay the learning rate
+        self.lr *= self.lr_decay # decay the learning rate
         
         if self.feature_version == "v2":
             print(f"f_prev: {f_prev}, f_curr: {f_curr}")
@@ -590,106 +508,233 @@ class OnlineTAMERAgent(TAMERAgent):
         if self.feature_version == "v3" or self.feature_version == "v4" or self.feature_version == "v6":
             f_prev = np.zeros(6)
             f_curr = np.zeros(6)
-        print(f"Projected Reward: {projected_rew}, user_rew: {user_rew}")
-        print(f"w (updated): {self.w}, error: {error}")
-        print(f"delta_f: {delta_f}")
-        print("============")      # w += α * error * Δf
         # log the above information to the log file
-        with open(self.log_path, "a") as f:
-            if self.feature_version == "v2":
-                f.write(f"[FEATURE] f_prev: {f_prev}, f_curr: {f_curr}\n")
-            else:
-                f.write(f"[FEATURE] f_prev: {f_prev}, f_curr: {f_curr}\n")
-            f.write(f"[REWARD] Projected Reward: {projected_rew}, user_rew: {user_rew}, error: {error}\n")
-            # Convert numpy array to string with commas as separators and no newlines
-            weight_str = np.array2string(self.w, separator=', ', max_line_width=np.inf)
-            f.write(f"[WEIGHT] self.w: {weight_str}\n")
-            f.write("============\n")
+        if self.log_path is not None:
+            with open(self.log_path, "a") as f:
+                if self.feature_version == "v2":
+                    f.write(f"[FEATURE] f_prev: {f_prev}, f_curr: {f_curr}\n")
+                else:
+                    f.write(f"[FEATURE] f_prev: {f_prev}, f_curr: {f_curr}\n")
+                f.write(f"[REWARD] Projected Reward: {projected_rew}, user_rew: {user_rew}, error: {error}\n")
+                # Convert numpy array to string with commas as separators and no newlines
+                weight_str = np.array2string(self.w, separator=', ', max_line_width=np.inf)
+                f.write(f"[WEIGHT] self.w: {weight_str}\n")
+                f.write("============\n")
             
         # write detailed log to the log file
         # in format of (state_t, reward_t), (state_{t+1}, reward_{t+1}), ...
-        detailed_log_file = self.log_path.replace(".log", "_detailed.log")
-        with open(detailed_log_file, "a") as f:
-            history_str_cleaned = str(self.history[-delay-1]).replace('\n', '') # Replace newline with its literal representation
-            f.write(f"[state, action, reward] : {history_str_cleaned}\n")
+        if self.log_path is not None:
+            detailed_log_file = self.log_path.replace(".log", "_detailed.log")
+            with open(detailed_log_file, "a") as f:
+                history_str_cleaned = str(self.history[-delay-1]).replace('\n', '') # Replace newline with its literal representation
+                f.write(f"[state, action, reward] : {history_str_cleaned}\n")
         return
     
     
 class OnlineNoisyTAMERAgent(OnlineTAMERAgent):
     """ same as OnlineTAMERAgent, but add noise to feedbacks, controlled by feedback_accuracy"""
-    def __init__(self, w = None, save_path = "tamer_weights_online_noisy.npy", alpha = 0.01, negative_feedback_only = False, lr_decay = 0.998, epsilon_train = 0.2, epsilon_test = 0.1, feature_version = "v2", model_noise = "", feedback_tpr = 1.0, feedback_fpr = 1.0):
-        super().__init__(w, save_path, alpha, lr_decay, feature_version = feature_version)
-        self.feedback_tpr = feedback_tpr
-        self.feedback_fpr = feedback_fpr
+    def __init__(self, **kwargs):
+        assert 'weight' in kwargs, "weight must be provided"
+        assert 'save_path' in kwargs, "save_path must be provided"
+        assert 'lr' in kwargs, "lr must be provided (default 0.01)"
+        assert 'negative_feedback_only' in kwargs, "negative_feedback_only must be provided (default True)"
+        assert 'lr_decay' in kwargs, "lr_decay must be provided (default 0.998)"
+        assert 'epsilon_train' in kwargs, "epsilon_train must be provided (default 0.2)"
+        assert 'epsilon_test' in kwargs, "epsilon_test must be provided (default 0.1)"
+        assert 'feature_version' in kwargs, "feature_version must be provided (default v4)"
+        assert 'feedback_tpr' in kwargs, "feedback_tpr must be provided (default 1.0)"
+        assert 'feedback_tnr' in kwargs, "feedback_tnr must be provided (default 1.0)"
+        assert 'mode' in kwargs, "mode must be provided (default train)"
+        assert 'feedback_processor' in kwargs, "feedback_processor must be provided (default None) (eg. 'TINYMLFeedbackPreProcessor')"
+        assert 'uncertainty_bonus_scale' in kwargs, "uncertainty_bonus_scale must be provided (default 0.0)"
+        
+        
+        used_keys = ['weight', 'save_path', 'lr', 'negative_feedback_only', 'lr_decay', 'epsilon_train', 'epsilon_test', 'feature_version', 'feedback_tpr', 'feedback_tnr', 'mode', 'feedback_processor', 'uncertainty_bonus_scale']
+        # if there is any other key in kwargs, print them out and notice that they are not used
+        for key in kwargs:
+            if key not in used_keys:
+                print(f"Warning: {key}:{kwargs[key]} is not used in OnlineNoisyTAMERAgent")
+        
+        self.w = handle_initial_weights(kwargs['weight'])
+        self.save_path = kwargs['save_path']
+        self.lr = kwargs['lr']
+        self.negative_feedback_only = kwargs['negative_feedback_only']
+        self.lr_decay = kwargs['lr_decay']
+        self.epsilon_train = kwargs['epsilon_train']
+        self.epsilon_test = kwargs['epsilon_test']
+        self.feature_version = kwargs['feature_version']
+        self.feedback_tpr = kwargs['feedback_tpr']
+        self.feedback_tnr = kwargs['feedback_tnr']
+        self.mode = kwargs['mode']
+        self.uncertainty_bonus_scale = kwargs['uncertainty_bonus_scale']
         self.log_path = f"logs/{datetime.now().strftime('%Y-%m-%d')}-{datetime.now().strftime('%H-%M-%S')}-online-tamer-noisy.log"
         self.log_path_v2 = f"logs/{datetime.now().strftime('%Y-%m-%d')}-{datetime.now().strftime('%H-%M-%S')}-online-tamer-noisy_v2.log"
-        self.negative_feedback_only = negative_feedback_only
-        self.epsilon_train = epsilon_train
-        self.epsilon_test = epsilon_test
-        self.model_noise = model_noise
+        self.history = []
+        
+        self.feedback_signal_mixer = DiscreteNegativeOnlySignalMixer(tpr = self.feedback_tpr, tnr = self.feedback_tnr)
+        
+        self.feedback_preprocessor = None
+        if kwargs['feedback_processor'] == "TINYMLFeedbackPreProcessor":
+            self.feedback_preprocessor = TINYMLFeedbackPreProcessor(feature_version = self.feature_version, negative_feedback_only = self.negative_feedback_only)
+        elif kwargs['feedback_processor'] == "GPPFeedbackPreProcessor":
+            self.feedback_preprocessor = GPPFeedbackPreProcessor(feature_version = self.feature_version, negative_feedback_only = self.negative_feedback_only)
+        elif kwargs['feedback_processor'] == "TinyBernoulliFeedbackPreProcessor":
+            self.feedback_preprocessor = TinyBernoulliFeedbackPreProcessor(feature_version = self.feature_version, negative_feedback_only = self.negative_feedback_only)
+        elif kwargs['feedback_processor'] == "CountBasedFeedbackPreProcessor":
+            self.feedback_preprocessor = CountBasedFeedbackPreProcessor(feature_version = self.feature_version, negative_feedback_only = self.negative_feedback_only)
         
         # write to log all the parameters
         with open(self.log_path_v2, "a") as f:
+            for key in used_keys:
+                f.write(f"{key}: {kwargs[key]}\n")
             f.write(f"logfile: {self.log_path_v2}\n")
-            f.write(f"alpha: {alpha}\n")
-            f.write(f"feedback_tpr: {feedback_tpr}\n")
-            f.write(f"feedback_fpr: {feedback_fpr}\n")
-            f.write(f"negative_feedback_only: {negative_feedback_only}\n")
-            f.write(f"lr_decay: {lr_decay}\n")
-            f.write(f"epsilon_train: {epsilon_train}\n")
-            f.write(f"epsilon_test: {epsilon_test}\n")
-            f.write(f"w: {w}\n")
-            f.write(f"feature_version: {feature_version}\n")
+            f.write(f"w: {self.w}\n")
             f.write("============\n")
     
     
-    def log_v2(self, previous_state, current_state, previous_action, reward, noisy_reward):
+    def log_v2(self, previous_state, current_state, previous_action, reward, noisy_reward, surrogate_reward, weights = [0.0 for _ in range(6)], explored = False):
         with open(self.log_path_v2, "a") as f:
             previous_state_str = str(previous_state).replace('\n', ',')
             current_state_str = str(current_state).replace('\n', ',')
-            f.write(f"[previous_state, current_state, previous_action, reward_gt, reward_noisy] : {previous_state_str}, {current_state_str}, {previous_action}, {reward}, {noisy_reward}\n")
+            weights_str = str(weights).replace('\n', ',')
+            f.write(f"[previous_state, current_state, previous_action, reward_gt, reward_noisy, reward_surrogate, weights, explored] : {previous_state_str}, {current_state_str}, {previous_action}, {reward}, {noisy_reward}, {surrogate_reward}, {weights_str}, {explored}\n")
+    
+    def get_uncertainty_bonus(self, prev_state, state):
+        # read the history, get the count fo delta 
+        pass
+    
+    def get_ss_transition_count(self, prev_state, state):
+        # read the history, compute delta features in history s_{t}, s_{t+1}
+        # then count the number of times the delta features are the same
+        # return the count
+        assert self.feature_version in ["v4", "v6"], "Invalid feature version"
+        f = None
+        if self.feature_version == "v4":
+            f = lambda state, next_state: compute_delta_features_v4(state, next_state)[2:4]
+        elif self.feature_version == "v6":
+            f = lambda state, next_state: compute_delta_features_v6(state, next_state)[2:4]
+        else:
+            raise ValueError(f"Invalid feature version: {self.feature_version}")
+        delta_features = f(prev_state, state)
+        count = 0
+        for i in range(len(self.history) - 1):
+            h_state = self.history[i][0]
+            h_state_next = self.history[i+1][0]
+            h_delta_features = f(h_state, h_state_next)
+            if np.all(h_delta_features == delta_features):
+                count += 1
+        return count
+        
     
     def act(self, observation, reward):
-        # if self.mode == "train":, than the policy is epsilon-greedy
-        # print(f"act called with reward: {reward}")
-        if self.mode == "train":
-            # instead of super, call the act method of TAMERAgent
-            # the grandparent act calculate the epsilon optimal action and does not do updates
-            action = TAMERAgent.act(self, observation, reward, epsilon = self.epsilon_train)
-            # epsilon-greedy
+        
+        self.observation = observation
+        # ===================== THE ACTING PART, where the action is chosen based on the reward model =====================
+        
+        # Simulate transitions for each action to find the best
+        self.actions = [0, 1, 2]  # Hardcoded for robottaxi, assuming 3 actions
+        best_as = []
+        max_rew = -float('inf')
+        
+        candidate_actions = self.actions[::]
+        ss_transition_count = []
+        action_predicted_rewards = []
+        for a in candidate_actions:
+            action_predicted_rewards.append(self.project_reward(self.observation, a, self.w))
+            next_state = self.__class__.peek_next_state(self.observation, a)
+            ss_transition_count.append(self.get_ss_transition_count(self.observation, next_state))
+        
+        # UCB-style action scoring: reward + beta * sqrt(log(total)/ (count+1))
+        counts = np.asarray(ss_transition_count, dtype=float)
+        preds = np.asarray(action_predicted_rewards, dtype=float)
+        total = float(counts.sum()) + 1.0
+        if self.uncertainty_bonus_scale > 0:
+            beta = self.uncertainty_bonus_scale
         else:
-            action = TAMERAgent.act(self, observation, reward, epsilon = self.epsilon_test)
-            # some epsilon for loop breaking
+            beta = 0
+        bonus = beta * np.sqrt(np.log(total + 1.0) / (counts + 1.0))
+        rew_plus_uncertainty_bonus = preds + bonus
         
+        print(f"counts: {counts}")
+        print(f"raw predicted rewards: {list(action_predicted_rewards)}")
+        print(f"rew_plus_uncertainty_bonus: {rew_plus_uncertainty_bonus}")
         
+        for idx, a in enumerate(candidate_actions):
+            score = float(rew_plus_uncertainty_bonus[idx])
+            if score == max_rew:
+                max_rew = score
+                best_as.append(a)
+            elif score > max_rew:
+                max_rew = score
+                best_as = [a]
+                
+        # what are the best action without uncertainty bonus
+        best_as_no_bonus = []
+        max_rew_no_bonus = -float('inf')
+        for idx, a in enumerate(candidate_actions):
+            score = float(action_predicted_rewards[idx])
+            if score == max_rew_no_bonus:
+                max_rew_no_bonus = score
+                best_as_no_bonus.append(a)
+            elif score > max_rew_no_bonus:
+                max_rew_no_bonus = score
+                best_as_no_bonus = [a]
         
-        if noisy_reward == -1:
-            if np.random.rand() <= self.feedback_tpr:
-                noisy_reward = reward
-            else:
-                noisy_reward = 0
-        if np.random.rand() <= self.feedback_accuracy:
-            noisy_reward = reward
+        explored = False
+        # Fallback if no action found (shouldn't happen with valid states)
+        if len(best_as) == 0:
+            print("Warning: No best action found; choosing randomly")
+            action = np.random.choice(self.actions)
         else:
-            possible_rewards = [0, 1, -1]
-            if self.negative_feedback_only:
-                possible_rewards = [0, -1]
-            else:
-                possible_rewards.remove(reward)
-            noisy_reward = np.random.choice(possible_rewards)
+            action = np.random.choice(best_as)
+            if action not in best_as_no_bonus:
+                print(f"we explored because of the uncertainty bonus")
+                explored = True
+            # action = best_as[0]
+        
             
-            
-        # if self.model_noise == "GPR":
+        if self.mode == "train" and np.random.rand() < self.epsilon_train:
+            action = np.random.choice(self.actions)
+        elif self.mode == "eval" and np.random.rand() < self.epsilon_test:
+            action = np.random.choice(self.actions)
+        
+        if self.mode not in ["train", "eval"]:
+            raise ValueError(f"Invalid mode: {self.mode}, mode must be 'train' or 'eval'")
+        
+        self.last_action = action
+        
+        
+        
+        
+        # ===================== ADDING NOISE, this could be either part of the agent or not part of the agent We do not add noise at deployment time =====================
+        """
+        Mixing the ground truth reward signal
+        """
+        noisy_reward = reward
+        if self.feedback_signal_mixer is not None:
+            noisy_reward = self.feedback_signal_mixer.mix_signal(reward)
+        
+        
+        # ===================== HANDLING NOISY FEEDBACK, this is part of the agent =====================
+        # by default, if we are not using any feedback preprocessor, then the surrogate reward is the noisy reward
+        surrogate_reward = noisy_reward 
+        if self.previous_action is not None and self.feedback_preprocessor is not None:
+            surrogate_reward = self.feedback_preprocessor.get_feedback(state = self.previous_state, action = self.previous_action, next_state = observation, noisy_reward = noisy_reward)
+            if len(self.history) < 50:
+                surrogate_reward = noisy_reward # we don't trust the feedback_preprocessor too much when the history is too short
+            self.feedback_preprocessor.add_feedback(state = self.previous_state, action = self.previous_action, next_state = observation, noisy_reward = noisy_reward)
+            self.feedback_preprocessor.visualize_current_processor(save_path = False, show_plot = True)
+            reclaim_pygame_focus()
             
         
-        # else:
-        #     assert self.model_noise == "", 'model_noise must be either "GPR" or ""'
-            
         if self.previous_action is None:
-            pass
+            # the is the very first action, so no need to update log and weights, the state t0 and action a0 are save
+            # in class variable self.previous_state and self.previous_action, and will be consumed at the next act(*)
+            pass 
         else:
-            # The reward_t is the noisy reward which will be used by self.update_weights() to update the weights
-            self.history.append((self.previous_state, self.previous_action, noisy_reward, reward)) # state_t, action_t, reward_t, reward_gt) 
+            print(f"reward: {reward}, noisy_reward: {noisy_reward}, surrogate_reward: {surrogate_reward}")
+            # The reward_t is the reward which will be used by self.update_weights() to update the weights
+            self.history.append((self.previous_state, self.previous_action, surrogate_reward, reward)) # state_t, action_t, reward_t, reward_gt) 
             # Note: noisy_reward in the history will be used for weight update, while reward is used for logging
             # print(f"reward appended: {noisy_reward}")
         
@@ -697,11 +742,15 @@ class OnlineNoisyTAMERAgent(OnlineTAMERAgent):
                         current_state = observation,
                         previous_action = self.previous_action, 
                         reward = reward, 
-                        noisy_reward = noisy_reward)
+                        noisy_reward = noisy_reward,
+                        surrogate_reward = surrogate_reward,
+                        weights = self.w,
+                        explored = explored)
+            
+            if self.mode == "train":
+                self.update_weights() # this takes reward_t in history, which is the surrogate reward
             
         self.previous_state = observation
         self.previous_action = action
-        # update the tamer weights
-        self.update_weights()
         return action
             

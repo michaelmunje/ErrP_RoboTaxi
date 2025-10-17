@@ -6,7 +6,7 @@ import sys
 from typing import Any, List, Optional, Sequence, Tuple
 
 import matplotlib.pyplot as plt
-from matplotlib.colors import SymLogNorm
+from matplotlib.colors import SymLogNorm, LinearSegmentedColormap
 from matplotlib.scale import FuncScale
 import numpy as np
 
@@ -18,8 +18,7 @@ except Exception:
     if str(ROOT) not in sys.path:
         sys.path.append(str(ROOT))
     from utils import parse_grid
-from robotaxi.agent.tamer_agent import compute_delta_features_v4, compute_delta_features_v6
-from robotaxi.agent.tamer_agent import compute_delta_features_v4, compute_delta_features_v6
+from robotaxi.agent.game_feature_utils import compute_delta_features_v4, compute_delta_features_v6
 
 # ===== Global visualization and kernel flags =====
 # Toggle linear vs. symmetric-log color scaling for the heatmap (adjusted feedback).
@@ -47,6 +46,66 @@ RBF_LENGTH_SCALE_MULT: float = 1.0
 # For reciprocal axis mode: denominators to be evenly spaced on the axis (positive side)
 # Example: [1, 2, 3, 8] will place x = 1, 1/2, 1/3, 1/8 at equal visual spacing.
 RECIP_KNOTS_DENOMS: List[int] = [1, 2, 3, 4, 5, 6, 7, 8]
+
+class NonBlockingPlotter:
+    """Singleton plot manager to reuse a single window and show non-blocking.
+
+    - Use get_figure(key, nrows, ncols, ...) to obtain a persistent figure/axes.
+    - Use show(fig) for non-blocking refresh; next show updates the same window.
+    - Use close(key) to close and release a managed figure.
+    """
+    _instance = None
+
+    def __init__(self):
+        self._store = {}
+        try:
+            plt.ion()
+        except Exception:
+            pass
+
+    @classmethod
+    def instance(cls) -> "NonBlockingPlotter":
+        if cls._instance is None:
+            cls._instance = NonBlockingPlotter()
+        return cls._instance
+
+    def get_figure(self, key: str, nrows: int = 1, ncols: int = 1,
+                   figsize: Tuple[float, float] = (6, 5), dpi: int = 120,
+                   constrained_layout: bool = False):
+        entry = self._store.get(key)
+        if entry is None or not plt.fignum_exists(entry["fig"].number):
+            fig, axes = plt.subplots(nrows, ncols, figsize=figsize, dpi=dpi, constrained_layout=constrained_layout)
+            self._store[key] = {"fig": fig, "shape": (nrows, ncols)}
+            return fig, axes
+        fig = entry["fig"]
+        fig.clf()
+        fig.set_constrained_layout(bool(constrained_layout))
+        axes = fig.subplots(nrows, ncols)
+        self._store[key]["shape"] = (nrows, ncols)
+        return fig, axes
+
+    def show(self, fig, pause: float = 0.001) -> None:
+        try:
+            fig.canvas.draw_idle()
+            fig.canvas.flush_events()
+        except Exception:
+            pass
+        try:
+            plt.show(block=False)
+        except TypeError:
+            plt.show()
+        try:
+            plt.pause(pause)
+        except Exception:
+            pass
+
+    def close(self, key: str) -> None:
+        entry = self._store.pop(key, None)
+        if entry is not None:
+            try:
+                plt.close(entry["fig"])
+            except Exception:
+                pass
 
 class FeedbackPreProcessor(ABC):
     """
@@ -209,12 +268,15 @@ class GPPFeedbackPreProcessor(visualizeableFeedbackPreProcessorV4):
         noise_sigma: float = 0.20,       # observation noise (sigma)
         ridge_jitter: float = 1e-9       # numerical stability
     ):
-        assert feature_version in ["v4"], "Invalid feature version"
+        assert feature_version in ["v4", "v6"], "Invalid feature version"
         self.feature_version = feature_version
         self.negative_feedback_only = negative_feedback_only
-        self.featurize_fn = lambda state, next_state: compute_delta_features_v4(state, next_state)[2:4]
-        if USE_V6:
+        if feature_version == "v4":
+            self.featurize_fn = lambda state, next_state: compute_delta_features_v4(state, next_state)[2:4]
+        elif feature_version == "v6":
             self.featurize_fn = lambda state, next_state: compute_delta_features_v6(state, next_state)[2:4]
+        else:
+            raise ValueError(f"Invalid feature version: {feature_version}")
 
         # Hyperparams
         self.user_length_scale = length_scale
@@ -291,8 +353,8 @@ class GPPFeedbackPreProcessor(visualizeableFeedbackPreProcessorV4):
     
     # ---- visualization ----
     def visualize_current_processor(self, save_path: str = "", show_plot: bool = False) -> None:
-        if self.feature_version != "v4":
-            raise ValueError("visualize_current_processor only supports feature_version='v4'")
+        if self.feature_version not in ["v4", "v6"]:
+            raise ValueError("visualize_current_processor only supports feature_version='v4' or 'v6'")
 
         # Grid over [-2, 2]^2
         g = 60
@@ -320,9 +382,14 @@ class GPPFeedbackPreProcessor(visualizeableFeedbackPreProcessorV4):
             Z = (Ks @ self._K_inv_y).reshape(g, g)
             Z = clip_output(Z, self.negative_feedback_only)
 
-        # Plot
-        fig = plt.figure(figsize=(6, 5), dpi=120)
-        ax = plt.gca()
+        # Plot (reuse window)
+        nbp = NonBlockingPlotter.instance()
+        if self.feature_version == "v4":
+            fig, ax = nbp.get_figure("feedback_v4_gp", nrows=1, ncols=1, figsize=(6, 5), dpi=120)
+        elif self.feature_version == "v6":
+            fig, ax = nbp.get_figure("feedback_v6_gp", nrows=1, ncols=1, figsize=(6, 5), dpi=120)
+        else:
+            raise ValueError(f"Invalid feature version: {self.feature_version}")
         vmin, vmax = -1.0, (0.0 if self.negative_feedback_only else 1.0)
         if USE_LINEAR_COLOR:
             im = ax.imshow(Z, extent=(-2, 2, -2, 2), origin="lower", vmin=vmin, vmax=vmax, interpolation="nearest")
@@ -346,15 +413,19 @@ class GPPFeedbackPreProcessor(visualizeableFeedbackPreProcessorV4):
         # Axes scaling and zoom
         _apply_axis_scale(ax)
         ax.set_xlim(-PLOT_ZOOM_LIMIT, PLOT_ZOOM_LIMIT); ax.set_ylim(-PLOT_ZOOM_LIMIT, PLOT_ZOOM_LIMIT)
-        ax.set_xlabel("X1 (v4 Δpassenger proximity)"); ax.set_ylabel("X2 (v4 Δobstacle proximity)")
+        if self.feature_version == "v4":
+            ax.set_xlabel("X1 (v4 Δsum(1/passenger) proximity)"); ax.set_ylabel("X2 (v4 Δsum(1/obstacle) proximity)")
+        elif self.feature_version == "v6":
+            ax.set_xlabel("X1 (v6 Δmin(passenger) proximity)"); ax.set_ylabel("X2 (v6 Δmin(obstacle) proximity)")
+        else:
+            raise ValueError(f"Invalid feature version: {self.feature_version}")
         ax.set_title("GPPFeedbackPreProcessor — current adjusted feedback")
 
         if save_path:
             fig.savefig(save_path, bbox_inches="tight", dpi=150)
         if show_plot:
-            plt.show()
-        else:
-            plt.close(fig)
+            nbp.show(fig)
+        # do not close: keep same window for next update
 
 # ===== GP with Uncertainty (mean + variance) preprocessor =====
 class GPPUQFeedbackPreProcessor(GPPFeedbackPreProcessor):
@@ -421,8 +492,9 @@ class GPPUQFeedbackPreProcessor(GPPFeedbackPreProcessor):
                     var_diag[start:end] = np.maximum(kxx - quad, 0.0)
                 Z_var = var_diag.reshape(g, g)
 
-        # Plot side-by-side: mean | uncertainty
-        fig, axes = plt.subplots(1, 2, figsize=(11, 5), dpi=120, constrained_layout=True)
+        # Plot side-by-side: mean | uncertainty (reuse window)
+        nbp = NonBlockingPlotter.instance()
+        fig, axes = nbp.get_figure("feedback_v4_gp_uq", nrows=1, ncols=2, figsize=(11, 5), dpi=120, constrained_layout=True)
 
         # Mean panel
         ax = axes[0]
@@ -469,9 +541,8 @@ class GPPUQFeedbackPreProcessor(GPPFeedbackPreProcessor):
         if save_path:
             fig.savefig(save_path, bbox_inches="tight", dpi=150)
         if show_plot:
-            plt.show()
-        else:
-            plt.close(fig)
+            nbp.show(fig)
+        # keep window open for reuse
 
 # ===== Tiny-ML (small MLP with Huber) preprocessor =====
 class TINYMLFeedbackPreProcessor(visualizeableFeedbackPreProcessorV4):
@@ -489,13 +560,17 @@ class TINYMLFeedbackPreProcessor(visualizeableFeedbackPreProcessorV4):
         steps_per_update: int = 100,
         batch_size: int = 64,
         delta_huber: float = 1.0,
-        weight_decay: float = 2e-4
+        weight_decay: float = 0, # used to be 2e-4,
+        threshold: float = 0.4
     ):
-        assert feature_version in ["v4"], "Invalid feature version"
+        self.threshold = float(threshold)
+        assert feature_version in ["v4", "v6"], "Invalid feature version"
+        print(f"feature_version: {feature_version}")
         self.feature_version = feature_version
         self.negative_feedback_only = negative_feedback_only
-        self.featurize_fn = lambda state, next_state: compute_delta_features_v4(state, next_state)[2:4]
-        if USE_V6:
+        if feature_version == "v4":
+            self.featurize_fn = lambda state, next_state: compute_delta_features_v4(state, next_state)[2:4]
+        elif feature_version == "v6":
             self.featurize_fn = lambda state, next_state: compute_delta_features_v6(state, next_state)[2:4]
 
         # Replay
@@ -515,6 +590,14 @@ class TINYMLFeedbackPreProcessor(visualizeableFeedbackPreProcessorV4):
         self._W1 = self._b1 = self._W2 = self._b2 = None
         self._m = self._v = None
         self._t = 0
+        
+        # create a dummy visualization window that shows the current processor
+        nbp = NonBlockingPlotter.instance()
+        fig, ax = nbp.get_figure(
+            f"count_based_{self.feature_version}_heatmap",
+            nrows=1, ncols=1, figsize=(6, 5), dpi=120
+        )
+        nbp.show(fig)
 
     # ---- Internal helpers ----
 
@@ -609,19 +692,19 @@ class TINYMLFeedbackPreProcessor(visualizeableFeedbackPreProcessorV4):
 
     def get_feedback(self, state, action, next_state, noisy_reward) -> float:
         # Optionally do a brief update to incorporate latest pair before readout
-        self._train_few_steps()
         xf = np.asarray(self.featurize_fn(state, next_state), dtype=float).reshape(-1)
         z = self._predict(xf)
         return float(clip_output(z, self.negative_feedback_only))
     
     def visualize_current_processor(self, save_path: str = "", show_plot: bool = False) -> None:
-        if self.feature_version != "v4":
-            raise ValueError("visualize_current_processor only supports feature_version='v4'")
+        if self.feature_version not in ["v4", "v6"]:
+            raise ValueError("visualize_current_processor only supports feature_version='v4' or 'v6'")
 
-        # Grid over [-2, 2]^2
+        # Grid over [-2, 2]^2 for v4, [-10, 10]^2 for v6
         g = 60
-        gx = np.linspace(-2.0, 2.0, g)
-        gy = np.linspace(-2.0, 2.0, g)
+        xmin, xmax, ymin, ymax = (-2.0, 2.0, -2.0, 2.0) 
+        gx = np.linspace(xmin, xmax, g)
+        gy = np.linspace(ymin, ymax, g)
         GX, GY = np.meshgrid(gx, gy)
         grid2 = np.stack([GX.ravel(), GY.ravel()], axis=-1)
 
@@ -642,15 +725,21 @@ class TINYMLFeedbackPreProcessor(visualizeableFeedbackPreProcessorV4):
             Z = np.array([self._predict(embed(pt)) for pt in grid2]).reshape(g, g)
             Z = clip_output(Z, self.negative_feedback_only)
 
-        # Plot
-        fig = plt.figure(figsize=(6, 5), dpi=120)
-        ax = plt.gca()
+        # Plot (reuse window)
+        nbp = NonBlockingPlotter.instance()
+        if self.feature_version == "v4":
+            fig, ax = nbp.get_figure("feedback_v4_tinyml", nrows=1, ncols=1, figsize=(6, 5), dpi=120)
+        elif self.feature_version == "v6":
+            fig, ax = nbp.get_figure("feedback_v6_tinyml", nrows=1, ncols=1, figsize=(6, 5), dpi=120)
+        else:
+            raise ValueError(f"Invalid feature version: {self.feature_version}")
+        
         vmin, vmax = -1.0, (0.0 if self.negative_feedback_only else 1.0)
         if USE_LINEAR_COLOR:
-            im = ax.imshow(Z, extent=(-2, 2, -2, 2), origin="lower", vmin=vmin, vmax=vmax, interpolation="nearest")
+            im = ax.imshow(Z, extent=(xmin, xmax, ymin, ymax), origin="lower", vmin=vmin, vmax=vmax, interpolation="nearest")
         else:
             norm = SymLogNorm(linthresh=SYMLIN_COLOR_LINTHRESH, vmin=vmin, vmax=vmax)
-            im = ax.imshow(Z, extent=(-2, 2, -2, 2), origin="lower", norm=norm, interpolation="nearest")
+            im = ax.imshow(Z, extent=(xmin, xmax, ymin, ymax), origin="lower", norm=norm, interpolation="nearest")
         cbar = plt.colorbar(im, ax=ax); cbar.set_label("adjusted feedback")
 
         # Overlay observed points with requested markers
@@ -667,15 +756,511 @@ class TINYMLFeedbackPreProcessor(visualizeableFeedbackPreProcessorV4):
         # Axes scaling and zoom
         _apply_axis_scale(ax)
         ax.set_xlim(-PLOT_ZOOM_LIMIT, PLOT_ZOOM_LIMIT); ax.set_ylim(-PLOT_ZOOM_LIMIT, PLOT_ZOOM_LIMIT)
-        ax.set_xlabel("X1 (v4 Δpassenger proximity)"); ax.set_ylabel("X2 (v4 Δobstacle proximity)")
+        if self.feature_version == "v4":
+            ax.set_xlabel("X1 (v4 Δsum(1/passenger) proximity)"); ax.set_ylabel("X2 (v4 Δsum(1/obstacle) proximity)")
+        elif self.feature_version == "v6":
+            ax.set_xlabel("X1 (v6 Δmin(passenger) proximity)"); ax.set_ylabel("X2 (v6 Δmin(obstacle) proximity)")
+        else:
+            raise ValueError(f"Invalid feature version: {self.feature_version}")
+        
         ax.set_title("TINYMLFeedbackPreProcessor — current adjusted feedback")
 
         if save_path:
             fig.savefig(save_path, bbox_inches="tight", dpi=150)
         if show_plot:
-            plt.show()
+            nbp.show(fig)
+        # keep window open for reuse
+        
+class TinyBernoulliFeedbackPreProcessor(visualizeableFeedbackPreProcessorV4):
+    """
+    One-layer logistic regressor over features to model P(y=0|x).
+    Outputs:
+      mean  = -1 + p
+      var   = p * (1 - p)
+    Trained online with BCE-with-logits + Adam + L2.
+    """
+    def __init__(
+        self,
+        feature_version: str = "v4",
+        negative_feedback_only: bool = True,   # targets are {-1, 0}
+        seed: int = 123,
+        lr: float = 3e-3,
+        steps_per_update: int = 100,
+        batch_size: int = 512,                 # fine w/ <1000 data
+        weight_decay: float = 2e-4
+    ):
+        assert feature_version in ["v4", "v6"], "Invalid feature version"
+        print(f"feature_version: {feature_version}")
+        self.feature_version = feature_version
+        self.negative_feedback_only = negative_feedback_only
+
+        if feature_version == "v4":
+            self.featurize_fn = lambda state, next_state: compute_delta_features_v4(state, next_state)[2:4]
         else:
-            plt.close(fig)
+            self.featurize_fn = lambda state, next_state: compute_delta_features_v6(state, next_state)[2:4]
+
+        # Replay
+        self._X: List[np.ndarray] = []
+        self._y: List[float] = []
+
+        # Opt/Train
+        self.rng = np.random.default_rng(seed)
+        self.lr = float(lr)
+        self.steps = int(steps_per_update)
+        self.batch = int(batch_size)
+        self.wd = float(weight_decay)
+
+        # Params (lazy)
+        self._W = None   # [d_in, 1]
+        self._b = None   # [1]
+        # Adam buffers
+        self._mW = self._vW = self._mb = self._vb = None
+        self._t = 0
+
+    # ---------- utils ----------
+    @staticmethod
+    def _sigmoid(z):
+        # stable sigmoid
+        out = np.empty_like(z)
+        pos = z >= 0
+        out[pos] = 1.0 / (1.0 + np.exp(-z[pos]))
+        ez = np.exp(z[~pos])
+        out[~pos] = ez / (1.0 + ez)
+        return out
+
+    def _labels_ok(self, y: float) -> float:
+        # restrict to {-1, 0}
+        return 0.0 if y >= -0.5 else -1.0
+
+    def _ensure_params(self, d_in: int):
+        if self._W is not None: return
+        rs = self.rng
+        self._W = rs.normal(0, 1/np.sqrt(d_in), size=(d_in, 1))
+        self._b = np.zeros(1)
+        self._mW = np.zeros_like(self._W); self._vW = np.zeros_like(self._W)
+        self._mb = np.zeros_like(self._b); self._vb = np.zeros_like(self._b)
+        self._t = 0
+
+    def _forward_logits(self, X: np.ndarray) -> np.ndarray:
+        # X: [N, d], returns logits [N, 1]
+        return X @ self._W + self._b
+
+    def _adam_step(self, gW: np.ndarray, gb: np.ndarray, b1=0.9, b2=0.999, eps=1e-8):
+        self._t += 1
+        self._mW = b1*self._mW + (1-b1)*gW
+        self._vW = b2*self._vW + (1-b2)*(gW*gW)
+        self._mb  = b1*self._mb  + (1-b1)*gb
+        self._vb  = b2*self._vb  + (1-b2)*(gb*gb)
+
+        mW_hat = self._mW / (1 - b1**self._t)
+        vW_hat = self._vW / (1 - b2**self._t)
+        mb_hat = self._mb  / (1 - b1**self._t)
+        vb_hat = self._vb  / (1 - b2**self._t)
+
+        self._W -= self.lr * mW_hat / (np.sqrt(vW_hat) + eps)
+        self._b -= self.lr * mb_hat / (np.sqrt(vb_hat) + eps)
+
+    def _train_few_steps(self):
+        if len(self._X) == 0: return
+        X = np.vstack(self._X)                         # [N, d]
+        y = np.asarray(self._y, dtype=float)           # [-1 or 0], [N]
+        self._ensure_params(X.shape[1])
+
+        # map y∈{-1,0} -> t∈{0,1} with t = 1 if y==0 else 0
+        t = (y == 0.0).astype(np.float64).reshape(-1, 1)
+
+        N = X.shape[0]
+        bs = min(self.batch, N)
+
+        for _ in range(self.steps):
+            idx = self.rng.choice(N, size=bs, replace=False)
+            Xb = X[idx]                 # [bs, d]
+            tb = t[idx]                 # [bs, 1]
+
+            logits = self._forward_logits(Xb)          # [bs, 1]
+            p = self._sigmoid(logits)                  # [bs, 1]
+
+            # BCE-with-logits gradient wrt logits is (p - t)
+            grad_s = (p - tb) / bs                     # [bs, 1], mean over batch
+
+            # L2 regularization on W
+            gW = Xb.T @ grad_s + self.wd * self._W     # [d,1]
+            gb = grad_s.sum(axis=0)                    # [1]
+
+            self._adam_step(gW, gb)
+
+    def _predict_stats(self, xf: np.ndarray) -> Tuple[float, float, float]:
+        """
+        Returns (p, mean, var) for a single feature vector.
+          p    = P(y=0|x)
+          mean = -1 + p  in [-1,0]
+          var  = p*(1-p)
+        """
+        if self._W is None or len(self._X) == 0:
+            p = 0.5  # neutral if untrained
+            return p, -1 + p, p * (1 - p)
+        s = float(xf @ self._W + self._b)
+        p = 1.0 / (1.0 + np.exp(-s))
+        mean = -1.0 + p
+        var = p * (1.0 - p)
+        return p, mean, var
+
+    # ---------- public API ----------
+    def add_feedback(self, state, action, next_state, noisy_reward) -> None:
+        xf = np.asarray(self.featurize_fn(state, next_state), dtype=float).reshape(1, -1)
+        y  = self._labels_ok(float(noisy_reward))
+        self._X.append(xf.reshape(-1))
+        self._y.append(y)
+        self._train_few_steps()
+
+    def get_feedback(self, state, action, next_state, noisy_reward) -> float:
+        xf = np.asarray(self.featurize_fn(state, next_state), dtype=float).reshape(-1)
+        _, mean, _ = self._predict_stats(xf)
+        # mean already in [-1,0]; reuse clipper for consistency with your stack
+        return float(clip_output(mean, self.negative_feedback_only))
+
+    def visualize_current_processor(self, save_path: str = "", show_plot: bool = False) -> None:
+        if self.feature_version not in ["v4", "v6"]:
+            raise ValueError("visualize_current_processor only supports feature_version='v4' or 'v6'")
+
+        # Grid over [-2,2]^2  (your request)
+        g = 60
+        xmin, xmax, ymin, ymax = (-2.0, 2.0, -2.0, 2.0)
+        gx = np.linspace(xmin, xmax, g)
+        gy = np.linspace(ymin, ymax, g)
+        GX, GY = np.meshgrid(gx, gy)
+        grid2 = np.stack([GX.ravel(), GY.ravel()], axis=-1)
+
+        # Embed into current feature space (like your v4/v6 embedding rule)
+        if self._W is None or len(self._X) == 0:
+            Z_mean = np.zeros((g, g))
+            Z_var = np.zeros((g, g))
+            d_in = 4  # default for embedding layout before init
+        else:
+            d_in = self._W.shape[0]
+
+        def embed(pt2):
+            full = np.zeros(d_in, dtype=float)
+            if d_in >= 4:
+                full[2] = pt2[0]
+                full[3] = pt2[1]
+            else:
+                full[:min(2, d_in)] = pt2[:min(2, d_in)]
+            return full
+
+        if self._W is not None and len(self._X) > 0:
+            means = []
+            vars_ = []
+            for pt in grid2:
+                p, m, v = self._predict_stats(embed(pt))
+                means.append(m)
+                vars_.append(v)
+            Z_mean = np.array(means).reshape(g, g)
+            Z_mean = clip_output(Z_mean, self.negative_feedback_only)
+            Z_var = np.array(vars_).reshape(g, g)  # already in [0, 0.25]
+
+        # Plot side-by-side: mean and variance
+        nbp = NonBlockingPlotter.instance()
+        fig, axes = nbp.get_figure(
+            f"feedback_{self.feature_version}_tinybern_mean_var",
+            nrows=1, ncols=2, figsize=(11, 5), dpi=120
+        )
+
+        # Left: mean ([-1,0])
+        ax0 = axes[0]
+        vmin, vmax = -1.0, 0.0
+        if USE_LINEAR_COLOR:
+            im0 = ax0.imshow(Z_mean, extent=(xmin, xmax, ymin, ymax), origin="lower",
+                             vmin=vmin, vmax=vmax, interpolation="nearest")
+        else:
+            norm0 = SymLogNorm(linthresh=SYMLIN_COLOR_LINTHRESH, vmin=vmin, vmax=vmax)
+            im0 = ax0.imshow(Z_mean, extent=(xmin, xmax, ymin, ymax), origin="lower",
+                             norm=norm0, interpolation="nearest")
+        c0 = plt.colorbar(im0, ax=ax0); c0.set_label("Predictive mean (-1 to 0)")
+        ax0.set_title("Predictive Mean")
+        _apply_axis_scale(ax0)
+        ax0.set_xlim(-PLOT_ZOOM_LIMIT, PLOT_ZOOM_LIMIT); ax0.set_ylim(-PLOT_ZOOM_LIMIT, PLOT_ZOOM_LIMIT)
+        if self.feature_version == "v4":
+            ax0.set_xlabel("X1 (v4 Δsum(1/passenger))"); ax0.set_ylabel("X2 (v4 Δsum(1/obstacle))")
+        else:
+            ax0.set_xlabel("X1 (v6 Δmin(passenger))"); ax0.set_ylabel("X2 (v6 Δmin(obstacle))")
+
+        # Right: variance ([0, 0.25])
+        ax1 = axes[1]
+        im1 = ax1.imshow(Z_var, extent=(xmin, xmax, ymin, ymax), origin="lower",
+                         vmin=0.0, vmax=0.25, interpolation="nearest")
+        c1 = plt.colorbar(im1, ax=ax1); c1.set_label("Predictive variance p(1-p)")
+        ax1.set_title("Predictive Variance")
+        _apply_axis_scale(ax1)
+        ax1.set_xlim(-PLOT_ZOOM_LIMIT, PLOT_ZOOM_LIMIT); ax1.set_ylim(-PLOT_ZOOM_LIMIT, PLOT_ZOOM_LIMIT)
+        if self.feature_version == "v4":
+            ax1.set_xlabel("X1 (v4 Δsum(1/passenger))"); ax1.set_ylabel("X2 (v4 Δsum(1/obstacle))")
+        else:
+            ax1.set_xlabel("X1 (v6 Δmin(passenger))"); ax1.set_ylabel("X2 (v6 Δmin(obstacle))")
+
+        # Overlay observed points once (on both panes)
+        if len(self._X) > 0:
+            Xobs = np.vstack(self._X)
+            yobs = np.asarray(self._y, dtype=float).astype(int)
+            for ax in (ax0, ax1):
+                for val, mk in [(0, 'o'), (-1, '_')]:
+                    sel = (yobs == val)
+                    if np.any(sel):
+                        xi = 2 if Xobs.shape[1] > 2 else 0
+                        yi = 3 if Xobs.shape[1] > 3 else (1 if Xobs.shape[1] > 1 else 0)
+                        ax.scatter(Xobs[sel, xi], Xobs[sel, yi], s=28, marker=mk, alpha=0.9, linewidths=1.2)
+
+        fig.suptitle("Tiny Bernoulli Feedback — Mean & Variance", y=1.02)
+
+        if save_path:
+            fig.savefig(save_path, bbox_inches="tight", dpi=150)
+        if show_plot:
+            nbp.show(fig)
+        # keep window open for reuse
+        
+        
+class CountBasedFeedbackPreProcessor(visualizeableFeedbackPreProcessorV4):
+    """
+    Count-based local vs global comparator on labels {-1, 0}.
+    Maintains 2D features X2 in [-2,2]^2 and noisy labels Y in {-1,0}.
+    
+    Predict(x):
+      A = count(y == -1 for y in Y)
+      B = count(y == 0  for y in Y)
+      C = count(y == -1 for (x',y) in zip(X2,Y) if |x'-x| <= radius (per-axis))
+      D = count(y == 0  for (x',y) in zip(X2,Y) if |x'-x| <= radius (per-axis))
+
+      if C + D < min_local or A + B == 0: return 0
+      else return -1 * ( C/(C+D) - A/(A+B) )   # clipped downstream if needed
+
+    Visualize: heatmap of -C/(C+D) on [-2,2]^2.
+    """
+    def __init__(
+        self,
+        feature_version: str = "v4",
+        negative_feedback_only: bool = True,   # outputs usually in [-1,0]
+        radius: Union[float, str] = 'quadrants',                   # "±1 inclusive", tunable, or 'quadrants'
+        min_local: int = 10,                    # threshold for local evidence
+        seed: int = 123,
+        margin: float = 0.03
+    ):
+        assert feature_version in ["v4", "v6"], "Invalid feature version"
+        print(f"feature_version: {feature_version}")
+        self.feature_version = feature_version
+        self.negative_feedback_only = negative_feedback_only
+
+        if feature_version == "v4":
+            self.featurize_fn = lambda state, next_state: compute_delta_features_v4(state, next_state)[2:4]
+        else:
+            self.featurize_fn = lambda state, next_state: compute_delta_features_v6(state, next_state)[2:4]
+        
+        self.radius = radius
+        if radius != 'quadrants':
+            self.radius = float(radius)
+        self.min_local = int(min_local)
+        self.rng = np.random.default_rng(seed)
+        self.margin = float(margin)
+
+        # Replay (store ONLY the 2D features used for locality)
+        self._X2: List[np.ndarray] = []
+        self._Y:  List[int] = []   # -1 or 0
+        
+        # create a dummy visualization window that shows the current processor
+        nbp = NonBlockingPlotter.instance()
+        fig, ax = nbp.get_figure(
+            f"count_based_{self.feature_version}_heatmap",
+            nrows=1, ncols=1, figsize=(6, 5), dpi=120
+        )
+        nbp.show(fig)
+
+    # ---------- helpers ----------
+    @staticmethod
+    def _clean_label(y: float) -> int:
+        # Snap to {-1,0}
+        return 0 if y >= -0.5 else -1
+
+    def _extract_2d(self, state, next_state) -> np.ndarray:
+        # Ensure 2D np.array
+        vf = np.asarray(self.featurize_fn(state, next_state), dtype=float)
+        assert vf.shape[0] == 2, "CountBasedFeedbackPreProcessor only supports 2D features"
+        return vf
+    
+    def _counts_global(self) -> Tuple[int, int]:
+        if len(self._Y) == 0:
+            return 0, 0
+        Y = np.asarray(self._Y, dtype=int)
+        A = int(np.sum(Y == -1))
+        B = int(np.sum(Y == 0))
+        return A, B
+
+    def _counts_local(self, x2: np.ndarray) -> Tuple[int, int, int]:
+        """
+        Returns (C, D, Nloc) with axis-aligned box |x-x'| <= radius (per coord).
+        """
+        if len(self._X2) == 0:
+            return 0, 0, 0
+        # Filter out any invalid/None entries that may have been added before fix
+        valid_idx = [i for i, xi in enumerate(self._X2) if isinstance(xi, np.ndarray) and xi.shape == (2,)]
+        if len(valid_idx) == 0:
+            return 0, 0, 0
+        X2 = np.vstack([self._X2[i] for i in valid_idx])  # [N,2]
+        Y  = np.asarray([self._Y[i] for i in valid_idx], dtype=int)  # [N]
+        # axis-aligned "chebyshev" box: per-axis threshold
+        if self.radius == 'quadrants':
+            # Local iff each coordinate of X2 is on the same side as x2.
+            # Zero is treated as both positive and negative (wildcard).
+            s_x = np.sign(x2)      # shape: (d,)
+            s_X = np.sign(X2)      # shape: (n, d)
+
+            # A coordinate matches if signs are equal OR either side is zero
+            same_side = (s_X == s_x) | (s_x == 0) | (s_X == 0)
+            close_mask = same_side.all(axis=1)
+        else:
+            close_mask = (np.abs(X2 - x2[None, :]) <= self.radius).all(axis=1)
+        Nloc = int(np.sum(close_mask))
+        if Nloc == 0:
+            return 0, 0, 0
+        Yloc = Y[close_mask]
+        C = int(np.sum(Yloc == -1))
+        D = int(np.sum(Yloc == 0))
+        return C, D, Nloc
+
+    # ---------- public API ----------
+    def add_feedback(self, state, action, next_state, noisy_reward) -> None:
+        # if either of state, action, next_state is None, then return
+        if state is None or action is None or next_state is None:
+            print(f"state, action, next_state is None, returning")
+            return
+        x2 = self._extract_2d(state, next_state)
+        if x2 is None or not isinstance(x2, np.ndarray) or x2.shape != (2,):
+            print(f"x2 is None or not isinstance(x2, np.ndarray) or x2.shape != (2,), returning")
+            # safety guard
+            return
+        y  = self._clean_label(float(noisy_reward))
+        self._X2.append(x2)
+        self._Y.append(y)
+
+    def get_feedback(self, state, action, next_state, noisy_reward) -> float:
+        x2 = self._extract_2d(state, next_state)
+        A, B = self._counts_global()
+        C, D, Nloc = self._counts_local(x2)
+
+        # Rules
+        if (C + D) < self.min_local or (A + B) == 0:
+            out = noisy_reward
+        else:
+            p_local_minus1  = C / (C + D)
+            p_global_minus1 = A / (A + B)
+            if (p_local_minus1 - p_global_minus1) > self.margin:
+                out = -1.0
+            else:
+                out = 0.0
+            fnr = 0.3
+            # if p_local_minus1 > fnr:
+            #     out = noisy_reward
+            
+            # out = -1.0 * (p_local_minus1 - p_global_minus1)
+
+        # Keep consistent with your stack's clipping convention
+        return float(clip_output(out, self.negative_feedback_only))
+
+    def visualize_current_processor(self, save_path: str = "", show_plot: bool = False) -> None:
+        if self.feature_version not in ["v4", "v6"]:
+            raise ValueError("visualize_current_processor only supports feature_version='v4' or 'v6'")
+
+        # Grid over [-2,2]^2
+        g = 60
+        xmin, xmax, ymin, ymax = -2.0, 2.0, -2.0, 2.0
+        gx = np.linspace(xmin, xmax, g)
+        gy = np.linspace(ymin, ymax, g)
+        GX, GY = np.meshgrid(gx, gy)
+        grid2 = np.stack([GX.ravel(), GY.ravel()], axis=-1)  # [M,2], M=g*g
+
+        # If no data, show zeros
+        if len(self._X2) <= 0:
+            Z = np.zeros((g, g))
+        else:
+            X2 = np.vstack(self._X2)             # [N,2]
+            Y  = np.asarray(self._Y, dtype=int)  # [N]
+
+            # Vectorized local counts for all grid points:
+            # If radius == 'quadrants', local means same sign per coordinate (zeros are wildcards).
+            # Else, local means |X2[n]-grid2[m]| <= radius per-axis.
+            # We'll broadcast: grid2[M,1,2] vs X2[1,N,2] -> mask[M,N]
+            Gm = grid2[:, None, :]                         # [M,1,2]
+            Xn = X2[None, :, :]                            # [1,N,2]
+            if self.radius == 'quadrants':
+                s_G = np.sign(Gm)                          # [M,1,2]
+                s_X = np.sign(Xn)                          # [1,N,2]
+                same_side = (s_X == s_G) | (s_G == 0) | (s_X == 0)
+                close = same_side.all(axis=2)              # [M,N]
+            else:
+                close = (np.abs(Xn - Gm) <= self.radius).all(axis=2)  # [M,N]
+
+            Yn = Y[None, :]                                # [1,N]
+            is_m1 = (Yn == -1)                             # [1,N]
+            is_0  = (Yn ==  0)                             # [1,N]
+
+            C_all = (close & is_m1).sum(axis=1)            # [M]
+            D_all = (close & is_0 ).sum(axis=1)            # [M]
+            denom_local = C_all + D_all                    # [M]
+
+            # Local mean over {-1,0} labels is -C/(C+D); if denom_local==0 -> 0
+            local_mean = np.where(denom_local > 0, -C_all / denom_local, 0.0).astype(float)  # [M]
+
+            # Global mean over {-1,0}: -A/(A+B) (scalar)
+            A = int(np.sum(Y == -1))
+            B = int(np.sum(Y == 0))
+            denom_global = A + B
+            global_mean = (-A / denom_global) if denom_global > 0 else 0.0
+
+            # Heatmap: (local_mean - global_mean)
+            Z_flat = (local_mean - global_mean)
+            Z = Z_flat.reshape(g, g)
+
+        # Plot single heatmap per your request
+        nbp = NonBlockingPlotter.instance()
+        fig, ax = nbp.get_figure(
+            f"count_based_{self.feature_version}_heatmap",
+            nrows=1, ncols=1, figsize=(6, 5), dpi=120
+        )
+
+        # Show symmetric range around 0 for local-global difference
+        vmin, vmax = -1.0, 1.0
+        # Diverging colormap: red (negative) -> white (zero) -> green (positive)
+        cmap = LinearSegmentedColormap.from_list("red_white_green", ["red", "white", "green"], N=256)
+        if USE_LINEAR_COLOR:
+            im = ax.imshow(Z, extent=(xmin, xmax, ymin, ymax), origin="lower",
+                           vmin=vmin, vmax=vmax, interpolation="nearest", cmap=cmap)
+        else:
+            norm = SymLogNorm(linthresh=SYMLIN_COLOR_LINTHRESH, vmin=vmin, vmax=vmax)
+            im = ax.imshow(Z, extent=(xmin, xmax, ymin, ymax), origin="lower",
+                           norm=norm, interpolation="nearest", cmap=cmap)
+        cbar = plt.colorbar(im, ax=ax); cbar.set_label("local mean − global mean")
+
+        # Overlay observed points
+        if len(self._X2) > 0:
+            Xobs = np.vstack(self._X2)
+            yobs = np.asarray(self._Y, dtype=int)
+            for val, mk in [(0, 'o'), (-1, '_')]:
+                sel = (yobs == val)
+                if np.any(sel):
+                    ax.scatter(Xobs[sel, 0], Xobs[sel, 1], s=28, marker=mk, alpha=0.9, linewidths=1.2)
+
+        _apply_axis_scale(ax)
+        ax.set_xlim(-PLOT_ZOOM_LIMIT, PLOT_ZOOM_LIMIT); ax.set_ylim(-PLOT_ZOOM_LIMIT, PLOT_ZOOM_LIMIT)
+        if self.feature_version == "v4":
+            ax.set_xlabel("X1 (v4 Δsum(1/passenger))"); ax.set_ylabel("X2 (v4 Δsum(1/obstacle))")
+        else:
+            ax.set_xlabel("X1 (v6 Δmin(passenger))"); ax.set_ylabel("X2 (v6 Δmin(obstacle))")
+
+        ax.set_title("Count-based Feedback — Heatmap of (local − global) mean")
+
+        if save_path:
+            fig.savefig(save_path, bbox_inches="tight", dpi=150)
+        if show_plot:
+            nbp.show(fig)
+        # keep window open
 
 
 
@@ -743,8 +1328,8 @@ class DiscreteNegativeOnlySignalMixer(UserSignalMixer):
     given a signal in {0, -1}, mix it with the tpr and tnr, return a signal in {0, -1}
     """
     def __init__(self, tpr: float, tnr: float):
-        self.tpr = tpr
-        self.tnr = tnr
+        self.tpr = tpr # TP / (TP + FN)
+        self.tnr = tnr # TN / (TN + FP)
         
     def mix_signal(self, signal: float) -> float:
         assert signal in {0, -1}, "signal must be in {0, -1}"

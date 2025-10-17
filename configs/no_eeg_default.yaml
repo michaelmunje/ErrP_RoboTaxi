@@ -1,0 +1,48 @@
+# ===============================
+# Snake AI replay client settings
+# ===============================
+# This YAML contains all CLI options with defaults. You can override any
+# of these via CLI (depending on your merge policy) or keep them here.
+#
+# Tip: Values shown here are typical defaults; adjust for your runs.
+
+# -------- Interface & run control --------
+interface: gui            # [cli|gui] Interface mode (command-line or GUI)
+agent: tamer-online-noisy             # [human|dqn|random|val-itr|mixed|one-hot-dqn|tile-coding|reward-learning|a2c|ppo|tamer-online|tamer-online-noisy]
+model: null               # path to a pre-trained agent model (string or null)
+level: ./robotaxi/levels/8x8-blank.json  # level definition JSON
+num_episodes: 3           # how many episodes to run in a row
+save_frames: false        # save frames as JPG in screenshots/ if true
+stationary: false         # whether the environment is stationary
+participant: test         # participant ID
+test_run: false           # whether this is a test-only run
+seeds: "42,42,43,44,45,46,47,48,49,50,51,52,53,54,55,56,57,58,59,60"  # comma-separated seeds string for the environment
+
+# -------- Collaborator settings --------
+collaborating_agent: null  # [human|dqn|random|val-itr|mixed|one-hot-dqn|tile-coding|reward-learning|a2c] or null
+collaborator_model: null   # path to a pre-trained collaborator model (string or null)
+
+# -------- Feedback / human-in-the-loop / BCI --------
+negative_feedback_only: true  # only report negative feedback to the agent
+feedback_accuracy: 1.0          # global feedback accuracy (if used)
+feedback_tpr: 0.55 # 0.55               # true positive rate for feedback (human/BCI pipeline)
+feedback_tnr: 0.7 # 0.7               # true negative rate for feedback (human/BCI pipeline)
+threshold: 50                   # probability threshold for user feedback (0~100)
+BCI: false                      # enable BCI mode (send/receive triggers via TiD)
+calibration: false              # enable calibration mode
+feedback_processor: CountBasedFeedbackPreProcessor        # e.g., 'TINYMLFeedbackPreProcessor' or null pr 'CountBasedFeedbackPreProcessor'
+
+# -------- Learning hyperparameters --------
+lr: 0.1                        # learning rate
+lr_decay: 0.98                 # learning rate decay
+epsilon_train: 0.1             # epsilon during training
+epsilon_test: 0.1               # epsilon during evaluation
+uncertainty_bonus_scale: 1    # scale for uncertainty exploration bonus
+
+# -------- Weights / features / modes --------
+weight: w30                    # path or identifier to agent's weight (required by some modes)
+feature_version: v6             # feature set version (e.g., v2, v4)
+mode: train                     # free-form string; e.g., 'train', 'eval', 'replay'
+
+# -------- Paths --------
+save_path: ./runs               # where to save logs/checkpoints/outputs

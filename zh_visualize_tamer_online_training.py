@@ -317,11 +317,9 @@ if __name__ == '__main__':
         RESULT_PATH = LOG_PATH.replace(".log", "-cumulative-reward.log")
         print(f"working on {LOG_PATH}, result will be saved to {RESULT_PATH}")
     
-    feature_version = "v2"
-    # read the feature version from args
-    if len(args) > 1:
-        feature_version = args[1]
-        print(f"feature version: {feature_version}")
+
+    feature_version = args[1]
+    print(f"feature version: {feature_version}")
         
     
     # Load the raw environment
@@ -354,6 +352,7 @@ if __name__ == '__main__':
                     print(f"Warning: Expected 6 weights, got {len(weight_values)} in line: {line}")
                     continue
                 weights.append(weight_values)
+                # print(f"weight_values: {weight_values}")
             except Exception as e:
                 print(f"Error parsing line: {line}")
                 print(f"Error details: {str(e)}")
@@ -378,7 +377,9 @@ if __name__ == '__main__':
     #     weights_at_steps.append( (first[i], weights[second[i]]) )
     
     # plot every 10 steps, or 5 times, whichever is more frequent
-    for i in range(0, len(weights), min(10, len(weights)//5)):
+    use_ckpt_freq = 5
+    use_ckpt_freq = min(use_ckpt_freq, len(weights)//5)
+    for i in range(0, len(weights), use_ckpt_freq):
         weights_at_steps.append( (i,weights[i]) )
     if weights_at_steps[-1][0] != len(weights) - 1:
         weights_at_steps.append( (len(weights) - 1, weights[-1]) )
@@ -389,9 +390,9 @@ if __name__ == '__main__':
     seeds = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19]
     for i, w in weights_at_steps:
         # agent = TAMERAgent(w=w)
-        agent = OnlineTAMERAgent(w=w, feature_version = feature_version)
+        agent = OnlineTAMERAgent(w=w, feature_version = feature_version, no_log = True)
         agent.no_update = True
-        agent.mode = "test"
+        agent.mode = "eval"
         gui = PyGameGUI(field_size=8)
         gui.load_environment(env)
         gui.load_agent(agent)
