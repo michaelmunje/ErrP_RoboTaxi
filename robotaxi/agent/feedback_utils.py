@@ -70,7 +70,7 @@ class NonBlockingPlotter:
         return cls._instance
 
     def get_figure(self, key: str, nrows: int = 1, ncols: int = 1,
-                   figsize: Tuple[float, float] = (3, 2.5), dpi: int = 120,
+                   figsize: Tuple[float, float] = (3, 2.5), dpi: int = 60,
                    constrained_layout: bool = False):
         entry = self._store.get(key)
         if entry is None or not plt.fignum_exists(entry["fig"].number):
@@ -385,9 +385,9 @@ class GPPFeedbackPreProcessor(visualizeableFeedbackPreProcessorV4):
         # Plot (reuse window)
         nbp = NonBlockingPlotter.instance()
         if self.feature_version == "v4":
-            fig, ax = nbp.get_figure("feedback_v4_gp", nrows=1, ncols=1, figsize=(3, 2.5), dpi=120)
+            fig, ax = nbp.get_figure("feedback_v4_gp", nrows=1, ncols=1, figsize=(3, 2.5), dpi=60)
         elif self.feature_version == "v6":
-            fig, ax = nbp.get_figure("feedback_v6_gp", nrows=1, ncols=1, figsize=(3, 2.5), dpi=120)
+            fig, ax = nbp.get_figure("feedback_v6_gp", nrows=1, ncols=1, figsize=(3, 2.5), dpi=60)
         else:
             raise ValueError(f"Invalid feature version: {self.feature_version}")
         vmin, vmax = -1.0, (0.0 if self.negative_feedback_only else 1.0)
@@ -494,7 +494,7 @@ class GPPUQFeedbackPreProcessor(GPPFeedbackPreProcessor):
 
         # Plot side-by-side: mean | uncertainty (reuse window)
         nbp = NonBlockingPlotter.instance()
-        fig, axes = nbp.get_figure("feedback_v4_gp_uq", nrows=1, ncols=2, figsize=(5.5, 2.5), dpi=120, constrained_layout=True)
+        fig, axes = nbp.get_figure("feedback_v4_gp_uq", nrows=1, ncols=2, figsize=(5.5, 2.5), dpi=60, constrained_layout=True)
 
         # Mean panel
         ax = axes[0]
@@ -595,7 +595,7 @@ class TINYMLFeedbackPreProcessor(visualizeableFeedbackPreProcessorV4):
         nbp = NonBlockingPlotter.instance()
         fig, ax = nbp.get_figure(
             f"count_based_{self.feature_version}_heatmap",
-            nrows=1, ncols=1, figsize=(3, 2.5), dpi=120
+            nrows=1, ncols=1, figsize=(3, 2.5), dpi=60
         )
         nbp.show(fig)
 
@@ -728,9 +728,9 @@ class TINYMLFeedbackPreProcessor(visualizeableFeedbackPreProcessorV4):
         # Plot (reuse window)
         nbp = NonBlockingPlotter.instance()
         if self.feature_version == "v4":
-            fig, ax = nbp.get_figure("feedback_v4_tinyml", nrows=1, ncols=1, figsize=(3, 2.5), dpi=120)
+            fig, ax = nbp.get_figure("feedback_v4_tinyml", nrows=1, ncols=1, figsize=(3, 2.5), dpi=60)
         elif self.feature_version == "v6":
-            fig, ax = nbp.get_figure("feedback_v6_tinyml", nrows=1, ncols=1, figsize=(3, 2.5), dpi=120)
+            fig, ax = nbp.get_figure("feedback_v6_tinyml", nrows=1, ncols=1, figsize=(3, 2.5), dpi=60)
         else:
             raise ValueError(f"Invalid feature version: {self.feature_version}")
         
@@ -963,7 +963,7 @@ class TinyBernoulliFeedbackPreProcessor(visualizeableFeedbackPreProcessorV4):
         nbp = NonBlockingPlotter.instance()
         fig, axes = nbp.get_figure(
             f"feedback_{self.feature_version}_tinybern_mean_var",
-            nrows=1, ncols=2, figsize=(5.5, 2.5), dpi=120
+            nrows=1, ncols=2, figsize=(5.5, 2.5), dpi=60
         )
 
         # Left: mean ([-1,0])
@@ -1069,7 +1069,7 @@ class CountBasedFeedbackPreProcessor(visualizeableFeedbackPreProcessorV4):
         nbp = NonBlockingPlotter.instance()
         fig, ax = nbp.get_figure(
             f"count_based_{self.feature_version}_heatmap",
-            nrows=1, ncols=1, figsize=(3, 2.5), dpi=120
+            nrows=1, ncols=1, figsize=(3, 2.5), dpi=60
         )
         nbp.show(fig)
 
@@ -1222,7 +1222,7 @@ class CountBasedFeedbackPreProcessor(visualizeableFeedbackPreProcessorV4):
         nbp = NonBlockingPlotter.instance()
         fig, ax = nbp.get_figure(
             f"count_based_{self.feature_version}_heatmap",
-            nrows=1, ncols=1, figsize=(3, 2.5), dpi=120
+            nrows=1, ncols=1, figsize=(3, 2.5), dpi=60
         )
 
         # Show symmetric range around 0 for local-global difference
