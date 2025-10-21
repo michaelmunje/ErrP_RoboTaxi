@@ -923,6 +923,12 @@ class PyGameGUI:
             if event.type == pygame.MOUSEBUTTONUP or event.type == pygame.JOYBUTTONUP:
                 minus_button_pressed = False # Reset pressed state, which is defined in the outer scope
                 plus_button_pressed = False
+            # also release on keyboard keyup to mirror mouse behavior
+            if event.type == pygame.KEYUP:
+                if event.key == pygame.K_MINUS:
+                    minus_button_pressed = False
+                if event.key == pygame.K_EQUALS:
+                    plus_button_pressed = False
                 
             flag_reward_minus, flag_reward_plus = False, False
             if event.type == pygame.MOUSEBUTTONDOWN:
@@ -941,6 +947,7 @@ class PyGameGUI:
                 feedback_log.append({"time": time.time(), "reward": -1, "prob": 1, "use_direct_prob": self.use_direct_ErrP_prob})
                 minus_button_pressed = True
                 self.parallel.signal(104)
+                self.pulse_button('minus')
                 print(3)
             
             # feedback from keypresses or joystick    
@@ -948,6 +955,7 @@ class PyGameGUI:
                 feedback_log.append({"time": time.time(), "reward": +1, "prob": 1, "use_direct_prob": self.use_direct_ErrP_prob})
                 plus_button_pressed = True
                 self.parallel.signal(108)
+                self.pulse_button('plus')
                 print(2)
         
         # feedback from tid events
@@ -958,6 +966,7 @@ class PyGameGUI:
             for (prob, tstamp) in self.drain_tid_events():
                 feedback_log.append({"time": time.time(), "reward": 0, "prob": prob, "use_direct_prob": self.use_direct_ErrP_prob})
                 if not self.use_direct_ErrP_prob and prob >= self.threshold:
+                    self.pulse_button('minus')
                     self.parallel.signal(104) # same as if we find a negative reward
             
         def aggregate_feedback_log():
