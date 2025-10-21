@@ -28,10 +28,10 @@ feedback_accuracy: 1.0          # global feedback accuracy (if used)
 feedback_tpr: 1 # 0.55               # true positive rate for feedback (human/BCI pipeline)
 feedback_tnr: 1 # 0.7               # true negative rate for feedback (human/BCI pipeline)
 threshold: 50                   # probability threshold for user feedback (0~100)
-BCI: false                      # enable BCI mode (send/receive triggers via TiD)
-calibration: true              # enable calibration mode
-feedback_processor: null        # e.g., 'TINYMLFeedbackPreProcessor' or null pr 'CountBasedFeedbackPreProcessor'
-margin: 0.00 # the lower the more sensitive, if==0 then very sensitive, recommends 0.03
+BCI: true                      # enable BCI mode (send/receive triggers via TiD)
+calibration: false              # enable calibration mode
+feedback_processor: CountBasedFeedbackPreProcessor    # e.g., 'TINYMLFeedbackPreProcessor' or null pr 'CountBasedFeedbackPreProcessor'
+margin: 0.03 # the lower the more sensitive, if==0 then very sensitive, recommends 0.03
 
 # -------- Learning hyperparameters --------
 lr: 0.1                        # learning rate

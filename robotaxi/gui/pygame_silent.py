@@ -281,8 +281,8 @@ class PyGameGUI:
             self.parallel = Trigger('ARDUINO')
         self.parallel.init(50)
         
-        self.use_direct_ErrP_prob = os.environ.get("USE_DIRECT_ERRP_PROB", "False")
-        if self.use_direct_ErrP_prob == "True":
+        self.use_direct_ErrP_prob = bool(os.environ.get("USE_DIRECT_ERRP_PROB", "False"))
+        if self.use_direct_ErrP_prob == True:
             print("Using direct error probability")
         else:
             print("Default: Not Using direct error probability, Using sign (max_prob > threshold)")
