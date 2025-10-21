@@ -152,7 +152,7 @@ class TiDReceiver(threading.Thread):
 class PyGameGUI:
     """ Provides a Snake GUI powered by Pygame. """
 
-    FPS_LIMIT = 60
+    FPS_LIMIT = 30
     AI_TIMESTEP_DELAY = 5000
     AI_TIMESTEP_DELAY = 2000
     # AI_TIMESTEP_DELAY = 200
@@ -251,6 +251,11 @@ class PyGameGUI:
         self._minus_visual_until = 0.0
         self._plus_visual_until  = 0.0
         self.button_pulse_ms     = int(os.getenv("BUTTON_PULSE_MS", "150"))
+        # transient green overlay flash when minus is pressed
+        self._minus_flash_until  = 0.0
+        self.minus_flash_ms      = int(os.getenv("MINUS_FLASH_MS", "300"))
+        self.minus_flash_alpha   = int(os.getenv("MINUS_FLASH_ALPHA", "30"))
+        self._overlay_surface     = None
         
         scheme = 'bulldozer'
         if BCI: # decoding
@@ -291,10 +296,29 @@ class PyGameGUI:
         until = time.time() + dur
         if which == 'minus':
             self._minus_visual_until = max(self._minus_visual_until, until)
+            # trigger a brief full-screen green overlay flash
+            self._start_minus_flash()
         elif which == 'plus':
             self._plus_visual_until  = max(self._plus_visual_until, until)
 
     
+    def _start_minus_flash(self, ms=None):
+        dur = (ms or getattr(self, "minus_flash_ms", 120)) / 1000.0
+        until = time.time() + dur
+        self._minus_flash_until = max(getattr(self, "_minus_flash_until", 0.0), until)
+
+    def _draw_minus_flash_overlay(self):
+        now = time.time()
+        if now < getattr(self, "_minus_flash_until", 0.0):
+            if self._overlay_surface is None or self._overlay_surface.get_size() != self.screen.get_size():
+                self._overlay_surface = pygame.Surface(self.screen.get_size(), pygame.SRCALPHA)
+            alpha = max(0, min(255, self.minus_flash_alpha))
+            self._overlay_surface.fill((255, 0, 0, alpha))
+            self.screen.blit(self._overlay_surface, (0, 0))
+
+    def _is_minus_flash_active(self):
+        return time.time() < getattr(self, "_minus_flash_until", 0.0)
+
     def drain_tid_events(self):
         """
         Pull all pending TiD events from the queue and return the list.
@@ -1028,6 +1052,8 @@ class PyGameGUI:
                 pass  # No sound to play
             if self.last_head == [0,0]:
                 for interpolate_idx in range(4): 
+                    # full redraw at start to ensure clean frame before any overlay
+                    self.render()
                     cell_coords = pygame.Rect(
                         self.env.snake.head[0]*self.CELL_SIZE,
                         self.env.snake.head[1]*self.CELL_SIZE,
@@ -1044,6 +1070,9 @@ class PyGameGUI:
                         )                   
                         self.screen.blit(self.spawn_icon, cell_coords_collaborator) 
                     self.render_scoreboard(0, self.env.max_step_limit, 0)
+                    if collect_feedback:
+                        draw_feedback_buttons()
+                        self._draw_minus_flash_overlay()
                     pygame.display.update()
                     self.fps_clock.tick(self.intermediate_frames+5)
                 pygame.draw.rect(self.screen, Colors.SCREEN_BACKGROUND, cell_coords)
@@ -1163,6 +1192,8 @@ class PyGameGUI:
                         self.CELL_SIZE,
                     )
                 for interpolate_idx in range(1, self.intermediate_frames-1):
+                    # full redraw at start so moving taxi is drawn after clear
+                    self.render()
                     
                     # read tid events from buffer and update feedback log
                     consume_tid_events_and_update_feedback_log()
@@ -1195,8 +1226,11 @@ class PyGameGUI:
                     pygame.display.set_caption(f'Robotaxi [Score: {score:01d}]   |   [Steps Remaining: {time_remaining:01d}]')       
                     if collect_feedback:
                         draw_feedback_buttons()
+                        self._draw_minus_flash_overlay()
                     pygame.display.update()
-                    self.fps_clock.tick(self.intermediate_frames+5)
+                    self.fps_clock.tick(self.intermediate_frames+5) # inner loop fps
+                # full redraw to clear any prior overlay before finalizing this step frame
+                self.render()
                 pygame.draw.rect(self.screen, Colors.SCREEN_BACKGROUND, imm_coords)
                 cell_coords = pygame.Rect(
                     x*self.CELL_SIZE,
@@ -1216,8 +1250,9 @@ class PyGameGUI:
                     self.render_scoreboard(score, time_remaining, timestep_result.reward)
                 if collect_feedback:
                     draw_feedback_buttons()
+                    self._draw_minus_flash_overlay()
                 pygame.display.update()
-                self.fps_clock.tick(self.FPS_LIMIT)
+                self.fps_clock.tick(self.FPS_LIMIT) # outer loop fps
         if collect_feedback and logger is not None:
             logger.close()
             self._step_logger = None
