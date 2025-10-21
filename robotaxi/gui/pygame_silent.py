@@ -282,6 +282,8 @@ class PyGameGUI:
         self.parallel.init(50)
         
         self.use_direct_ErrP_prob = bool(os.environ.get("USE_DIRECT_ERRP_PROB", "False"))
+        print(f"self.use_direct_ErrP_prob: {self.use_direct_ErrP_prob}")
+        import time; time.sleep(10)
         if self.use_direct_ErrP_prob == True:
             print("Using direct error probability")
         else:
