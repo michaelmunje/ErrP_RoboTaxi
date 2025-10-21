@@ -160,9 +160,13 @@ class PyGameGUI:
     HUMAN_TIMESTEP_DELAY = 1000
     # HUMAN_TIMESTEP_DELAY = 200
 
+    if int(os.getenv("OVERWRITE_TIMESTEP_DELAY", "0")) > 0:
+        AI_TIMESTEP_DELAY = int(os.getenv("OVERWRITE_TIMESTEP_DELAY", "0"))
+        HUMAN_TIMESTEP_DELAY = int(os.getenv("OVERWRITE_TIMESTEP_DELAY", "0"))
     if os.getenv("FAST_MODE", "0") == "1":
         AI_TIMESTEP_DELAY = 200
         HUMAN_TIMESTEP_DELAY = 200
+        
     
     SNAKE_CONTROL_KEYS = [
         pygame.K_UP,
