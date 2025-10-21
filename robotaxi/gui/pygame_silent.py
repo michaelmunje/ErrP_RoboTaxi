@@ -281,9 +281,9 @@ class PyGameGUI:
             self.parallel = Trigger('ARDUINO')
         self.parallel.init(50)
         
-        self.use_direct_ErrP_prob = bool(os.environ.get("USE_DIRECT_ERRP_PROB", "False"))
-        print(f"self.use_direct_ErrP_prob: {self.use_direct_ErrP_prob}")
-        import time; time.sleep(10)
+        self.use_direct_ErrP_prob = os.environ.get("USE_DIRECT_ERRP_PROB", "False") == "True"
+        # print(f"self.use_direct_ErrP_prob: {self.use_direct_ErrP_prob}")
+        # import time; time.sleep(10)
         if self.use_direct_ErrP_prob == True:
             print("Using direct error probability")
         else:
@@ -991,7 +991,9 @@ class PyGameGUI:
                 return
             for (prob, tstamp) in self.drain_tid_events():
                 feedback_log.append({"time": time.time(), "reward": 0, "prob": prob, "use_direct_prob": self.use_direct_ErrP_prob})
+                print(f"here in consume_tid_events_and_update_feedback_log, use_direct_ErrP_prob: {self.use_direct_ErrP_prob}, prob: {prob}, threshold: {self.threshold}")
                 if not self.use_direct_ErrP_prob and prob >= self.threshold:
+                    print(f"here in consume_tid_events_and_update_feedback_log, prob >= threshold")
                     self.pulse_button('minus')
                     self.parallel.signal(104) # same as if we find a negative reward
             
