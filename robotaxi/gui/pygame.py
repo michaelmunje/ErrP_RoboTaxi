@@ -4,19 +4,18 @@ import time
 import random
 import cv2
 import os
-import json
-import threading
-import logging
-import sys
 
+import threading
+import robotaxi
 from robotaxi.agent import HumanAgent
 from robotaxi.gameplay.entities import (CellType, SnakeAction, SnakeDirection, ALL_SNAKE_DIRECTIONS, ALL_SNAKE_ACTIONS, SNAKE_GROW, WALL_WARP, Point)
 from robotaxi.gameplay.environment import PLAY_SOUND
-from robotaxi.gui.python_client import Trigger
+
+robotaxi_path = os.path.dirname(robotaxi.gameplay.environment.__file__)
+#print(robotaxi_path)
+
 
 frame_ct = -1
-# parallel = Trigger('USB2LPT')
-# parallel.init(50)
 
 class captureThread(threading.Thread):
 
@@ -66,8 +65,8 @@ class PyGameGUI:
     """ Provides a Snake GUI powered by Pygame. """
 
     FPS_LIMIT = 60
-    AI_TIMESTEP_DELAY = 5000
-    HUMAN_TIMESTEP_DELAY = 5000
+    AI_TIMESTEP_DELAY = 500
+    HUMAN_TIMESTEP_DELAY = 500
 
     SNAKE_CONTROL_KEYS = [
         pygame.K_UP,
@@ -80,29 +79,16 @@ class PyGameGUI:
         #pygame.mixer.pre_init(44100, -16, 2, 32)
         pygame.init()
         pygame.mixer.init()
-
-        controller = os.getenv("CONTROLLER", "MOUSE")
-        if controller == "XBOX":
-            pygame.joystick.init()
-            
-            # Check if any joystick is connected
-            if pygame.joystick.get_count() == 0:
-                print("No Xbox controller detected. Exiting gracefully.")
-                sys.exit(1)  # Exit with an error code (1 means failure)
-
-            # Initialize the first available joystick
-            self.controller = pygame.joystick.Joystick(0)
-            self.controller.init()
-            print(f"Detected controller: {self.controller.get_name()}")
         
         pygame.mouse.set_visible(False)
-        self.punch_sound = pygame.mixer.Sound('sound/punch.wav')
-        self.begin_sound = pygame.mixer.Sound('sound/begin.wav')
-        self.good_sound = pygame.mixer.Sound('sound/good.wav')
-        self.bad_sound = pygame.mixer.Sound('sound/road_block_crash.wav')
-        self.very_bad_sound = pygame.mixer.Sound('sound/car_crash.wav')
-        self.stuck_sound = pygame.mixer.Sound('sound/woop.wav')
-        self.free_sound = pygame.mixer.Sound('sound/restart.wav')
+        self.base_dir = robotaxi_path + '/../../'
+        self.punch_sound = pygame.mixer.Sound(self.base_dir+'sound/punch.wav')
+        self.begin_sound = pygame.mixer.Sound(self.base_dir+'sound/begin.wav')
+        self.good_sound = pygame.mixer.Sound(self.base_dir+'sound/good.wav')
+        self.bad_sound = pygame.mixer.Sound(self.base_dir+'sound/road_block_crash.wav')
+        self.very_bad_sound = pygame.mixer.Sound(self.base_dir+'sound/car_crash.wav')
+        self.stuck_sound = pygame.mixer.Sound(self.base_dir+'sound/woop.wav')
+        self.free_sound = pygame.mixer.Sound(self.base_dir+'sound/restart.wav')
         self.agent = HumanAgent()
         self.collaborating_agent = None
         self.env = None
@@ -130,61 +116,54 @@ class PyGameGUI:
         
         self.test = test
 
-        self.spawn_icon = pygame.transform.scale(pygame.image.load("icon/wave.png"),(self.CELL_SIZE, self.CELL_SIZE))
-        self.wall_icon = pygame.transform.scale(pygame.image.load("icon/forest.png"),(self.CELL_SIZE, self.CELL_SIZE))
-        self.good_fruit_icon = pygame.transform.scale(pygame.image.load("icon/man.png"),(self.CELL_SIZE*2//3, self.CELL_SIZE*2//3))
-        self.bad_fruit_icon = pygame.transform.scale(pygame.image.load("icon/road_block.png"),(self.CELL_SIZE*2//3, self.CELL_SIZE*2//3))
-        self.lava_icon = pygame.transform.scale(pygame.image.load("icon/purple_car.png"),(self.CELL_SIZE, self.CELL_SIZE))
-        self.small_crash_icon = pygame.transform.scale(pygame.image.load("icon/road_block_broken.png"),(self.CELL_SIZE*2//3, self.CELL_SIZE*2//3))
-        self.big_crash_icon = pygame.transform.scale(pygame.image.load("icon/broken_purple_car.png"),(self.CELL_SIZE, self.CELL_SIZE*2//3))
-        self.reward_icon = pygame.transform.scale(pygame.image.load("icon/dollar.png"),(self.CELL_SIZE//3, self.CELL_SIZE//3))
+        self.spawn_icon = pygame.transform.scale(pygame.image.load(self.base_dir+"icon/wave.png"),(self.CELL_SIZE, self.CELL_SIZE))
+        self.wall_icon = pygame.transform.scale(pygame.image.load(self.base_dir+"icon/forest.png"),(self.CELL_SIZE, self.CELL_SIZE))
+        self.good_fruit_icon = pygame.transform.scale(pygame.image.load(self.base_dir+"icon/man.png"),(self.CELL_SIZE*2//3, self.CELL_SIZE*2//3))
+        self.bad_fruit_icon = pygame.transform.scale(pygame.image.load(self.base_dir+"icon/road_block.png"),(self.CELL_SIZE*2//3, self.CELL_SIZE*2//3))
+        self.lava_icon = pygame.transform.scale(pygame.image.load(self.base_dir+"icon/purple_car.png"),(self.CELL_SIZE, self.CELL_SIZE))
+        self.small_crash_icon = pygame.transform.scale(pygame.image.load(self.base_dir+"icon/road_block_broken.png"),(self.CELL_SIZE*2//3, self.CELL_SIZE*2//3))
+        self.big_crash_icon = pygame.transform.scale(pygame.image.load(self.base_dir+"icon/broken_purple_car.png"),(self.CELL_SIZE, self.CELL_SIZE*2//3))
+        self.reward_icon = pygame.transform.scale(pygame.image.load(self.base_dir+"icon/dollar.png"),(self.CELL_SIZE//3, self.CELL_SIZE//3))
         self.curr_icon = None
         self.curr_icon_collaborator = None
-        self.question1_icon = pygame.transform.scale(pygame.image.load("icon/question1.png"),(self.CELL_SIZE*2//3, self.CELL_SIZE*2//3))
-        self.question2_icon = pygame.transform.scale(pygame.image.load("icon/question2.png"),(self.CELL_SIZE*2//3, self.CELL_SIZE*2//3))
-        self.question3_icon = pygame.transform.scale(pygame.image.load("icon/question3.png"),(self.CELL_SIZE*2//3, self.CELL_SIZE*2//3))
-        self.pit_icon = pygame.transform.scale(pygame.image.load("icon/stopped.png"),(self.CELL_SIZE, self.CELL_SIZE))
-        self.stop_icon = pygame.transform.scale(pygame.image.load("icon/stopped.png"),(self.CELL_SIZE//3, self.CELL_SIZE//3))
-        self.accident_icon = pygame.transform.scale(pygame.image.load("icon/mad.png"),(self.CELL_SIZE*2//3, self.CELL_SIZE*2//3))
+        self.question1_icon = pygame.transform.scale(pygame.image.load(self.base_dir+"icon/question1.png"),(self.CELL_SIZE*2//3, self.CELL_SIZE*2//3))
+        self.question2_icon = pygame.transform.scale(pygame.image.load(self.base_dir+"icon/question2.png"),(self.CELL_SIZE*2//3, self.CELL_SIZE*2//3))
+        self.question3_icon = pygame.transform.scale(pygame.image.load(self.base_dir+"icon/question3.png"),(self.CELL_SIZE*2//3, self.CELL_SIZE*2//3))
+        self.pit_icon = pygame.transform.scale(pygame.image.load(self.base_dir+"icon/stopped.png"),(self.CELL_SIZE, self.CELL_SIZE))
+        self.stop_icon = pygame.transform.scale(pygame.image.load(self.base_dir+"icon/stopped.png"),(self.CELL_SIZE//3, self.CELL_SIZE//3))
+        self.accident_icon = pygame.transform.scale(pygame.image.load(self.base_dir+"icon/mad.png"),(self.CELL_SIZE*2//3, self.CELL_SIZE*2//3))
         #self.head_icon = pygame.transform.scale(pygame.image.load("icon/snake.png"),(self.CELL_SIZE, self.CELL_SIZE))
         #self.body_icon = pygame.transform.scale(pygame.image.load("icon/body.png"),(self.CELL_SIZE, self.CELL_SIZE))
-        self.punch_icon = pygame.transform.scale(pygame.image.load("icon/scary_tree.png"),(self.CELL_SIZE, self.CELL_SIZE))
+        self.punch_icon = pygame.transform.scale(pygame.image.load(self.base_dir+"icon/scary_tree.png"),(self.CELL_SIZE, self.CELL_SIZE))
         self.curr_head = [0,0]
         self.last_head = [0,0]
         self.curr_head_collaborator = [0,0]
         self.last_head_collaborator = [0,0]
         self.internal_padding = self.CELL_SIZE // 5
-        self.text_font = pygame.font.Font("fonts/gyparody_hv.ttf", int(23*(self.CELL_SIZE/40.0)))
-        self.num_font = pygame.font.Font("fonts/gyparody_tf.ttf", int(36*(self.CELL_SIZE/40.0))) 
-        self.marker_font =  pygame.font.Font("fonts/OpenSans-Bold.ttf", int(12*(self.CELL_SIZE/40.0)))
+        self.text_font = pygame.font.Font(self.base_dir+"fonts/gyparody_hv.ttf", int(23*(self.CELL_SIZE/40.0)))
+        self.num_font = pygame.font.Font(self.base_dir+"fonts/gyparody_tf.ttf", int(36*(self.CELL_SIZE/40.0))) 
+        self.marker_font =  pygame.font.Font(self.base_dir+"fonts/OpenSans-Bold.ttf", int(12*(self.CELL_SIZE/40.0)))
         pygame.display.set_caption('Robotaxi')
 
-        ##################################"serial port"#############################################
-        DEBUG_MODE = int(os.getenv("DEBUG_MODE", "0"))
-        if DEBUG_MODE:
-            self.parallel = Trigger('FAKE')
-        else:
-            self.parallel = Trigger('ARDUINO')
-        self.parallel.init(50)
     def set_icon_scheme(self, idx):
         scheme = self.car_schemes[idx]
-        self.south = pygame.transform.scale(pygame.image.load("icon/"+scheme+"_south.png"),(self.CELL_SIZE, self.CELL_SIZE-5))
-        self.north = pygame.transform.scale(pygame.image.load("icon/"+scheme+"_north.png"),(self.CELL_SIZE, self.CELL_SIZE-5))        
-        self.east = pygame.transform.scale(pygame.image.load("icon/"+scheme+"_east.png"),(self.CELL_SIZE, self.CELL_SIZE-5))
+        self.south = pygame.transform.scale(pygame.image.load(self.base_dir+"icon/"+scheme+"_south.png"),(self.CELL_SIZE, self.CELL_SIZE-5))
+        self.north = pygame.transform.scale(pygame.image.load(self.base_dir+"icon/"+scheme+"_north.png"),(self.CELL_SIZE, self.CELL_SIZE-5))        
+        self.east = pygame.transform.scale(pygame.image.load(self.base_dir+"icon/"+scheme+"_east.png"),(self.CELL_SIZE, self.CELL_SIZE-5))
         self.west = pygame.transform.flip(self.east,1,0)
 
     def set_icon_scheme_collaborator(self, idx):
         scheme = self.car_schemes[idx]
-        self.south_collaborator = pygame.transform.scale(pygame.image.load("icon/"+scheme+"_south.png"),(self.CELL_SIZE, self.CELL_SIZE-5))
-        self.north_collaborator = pygame.transform.scale(pygame.image.load("icon/"+scheme+"_north.png"),(self.CELL_SIZE, self.CELL_SIZE-5))        
-        self.east_collaborator = pygame.transform.scale(pygame.image.load("icon/"+scheme+"_east.png"),(self.CELL_SIZE, self.CELL_SIZE-5))
+        self.south_collaborator = pygame.transform.scale(pygame.image.load(self.base_dir+"icon/"+scheme+"_south.png"),(self.CELL_SIZE, self.CELL_SIZE-5))
+        self.north_collaborator = pygame.transform.scale(pygame.image.load(self.base_dir+"icon/"+scheme+"_north.png"),(self.CELL_SIZE, self.CELL_SIZE-5))        
+        self.east_collaborator = pygame.transform.scale(pygame.image.load(self.base_dir+"icon/"+scheme+"_east.png"),(self.CELL_SIZE, self.CELL_SIZE-5))
         self.west_collaborator = pygame.transform.flip(self.east_collaborator,1,0)
 
     def set_fixed_icon_scheme_collaborator(self):
         scheme = 'bulldozer'
-        self.south_collaborator = pygame.transform.scale(pygame.image.load("icon/"+scheme+"_south.png"),(self.CELL_SIZE, self.CELL_SIZE-5))
-        self.north_collaborator = pygame.transform.scale(pygame.image.load("icon/"+scheme+"_north.png"),(self.CELL_SIZE, self.CELL_SIZE-5))        
-        self.east_collaborator = pygame.transform.scale(pygame.image.load("icon/"+scheme+"_east.png"),(self.CELL_SIZE, self.CELL_SIZE-5))
+        self.south_collaborator = pygame.transform.scale(pygame.image.load(self.base_dir+"icon/"+scheme+"_south.png"),(self.CELL_SIZE, self.CELL_SIZE-5))
+        self.north_collaborator = pygame.transform.scale(pygame.image.load(self.base_dir+"icon/"+scheme+"_north.png"),(self.CELL_SIZE, self.CELL_SIZE-5))        
+        self.east_collaborator = pygame.transform.scale(pygame.image.load(self.base_dir+"icon/"+scheme+"_east.png"),(self.CELL_SIZE, self.CELL_SIZE-5))
         self.west_collaborator = pygame.transform.flip(self.east_collaborator,1,0)
 
     def load_environment(self, environment):
@@ -406,7 +385,7 @@ class PyGameGUI:
     def render(self):
         """ Draw the entire game frame. """
         self.screen.fill(Colors.SCREEN_BACKGROUND)
-        num_font = pygame.font.Font("fonts/gyparody_tf.ttf", int(24*(self.CELL_SIZE/40.0)))
+        num_font = pygame.font.Font(self.base_dir+"fonts/gyparody_tf.ttf", int(24*(self.CELL_SIZE/40.0)))
         if self.collaborating_agent is not None:
             icon_list = [self.good_fruit_icon, self.lava_icon]
             text_fields = ["+"+str(self.env.rewards['good_fruit']), str(self.env.rewards['lava'])]
@@ -651,7 +630,7 @@ class PyGameGUI:
                     if event.key == pygame.K_SPACE:
                         self.pause = False
                         if self.frame_num == 0:
-                            pygame.mixer.music.load("sound/background1.mp3") 
+                            pygame.mixer.music.load(self.base_dir+"sound/background1.mp3") 
                             pygame.mixer.music.set_volume(0.4)
                             pygame.mixer.music.play(-1,0.0)
                     if event.key == pygame.K_ESCAPE:
@@ -661,79 +640,28 @@ class PyGameGUI:
                     self.quit_game()
 
 
-    def run(self, num_episodes=1, participant='test'):
+    def run(self, num_episodes=1, participant='test', online_learning=False):
 
         """ Run the GUI player for the specified number of episodes. """
         pygame.display.update()
         self.fps_clock = pygame.time.Clock()
-        if self.collaborating_agent is not None: 
-            capture_thread1 = captureThread(0, participant=participant, data_dir='./user_study_data/', exp_id='collaborative', test=self.test)
-            capture_thread1.start()
-        else:
-            capture_thread1 = captureThread(0, participant=participant, data_dir='./user_study_data/', exp_id='original', test=self.test)
-            capture_thread1.start()
+        if not online_learning:
+            if self.collaborating_agent is not None: 
+                capture_thread1 = captureThread(0, participant=participant, data_dir='./user_study_data/', exp_id='collaborative', test=self.test)
+                capture_thread1.start()
+            else:
+                capture_thread1 = captureThread(0, participant=participant, data_dir='./user_study_data/', exp_id='original', test=self.test)
+                capture_thread1.start()
         try:
             for episode in range(num_episodes):                
-                self.run_episode(collect_feedback=True, participant_idx="test")
+                self.run_episode()
                 pygame.time.wait(1500)
-            capture_thread1.stop()
+            if not online_learning: capture_thread1.stop()
         except QuitRequestedError:
-            capture_thread1.stop()
-            
-    def run_episode(self, collect_feedback=False, participant_idx=None):
+            if not online_learning: capture_thread1.stop()
+
+    def run_episode(self):
         """ Run the GUI player for a single episode. """
-        
-        assert not collect_feedback or participant_idx is not None, "If collect_feedback is True, participant_idx must be specified."
-        
-        feedback_log = []
-        if collect_feedback:
-            feedback_font = pygame.font.Font(None, 36)  # Use default font with size 36
-            feedback_buttons = pygame.Rect(10, self.screen_size[1] - 50, self.screen_size[0] - 20, 40)  # Region at bottom
-            button_width = 100
-            button_height = 60
-            button_spacing = 20
-            center_x = self.screen_size[0] // 2
-            center_y = self.screen_size[1] - 100
-
-            minus_button = pygame.Rect(
-                center_x - button_width - (button_spacing // 2), 
-                center_y - (button_height // 2), 
-                button_width, 
-                button_height
-            )
-            plus_button = pygame.Rect(
-                center_x + (button_spacing // 2), 
-                center_y - (button_height // 2), 
-                button_width, 
-                button_height
-            )
-            
-            minus_button_pressed = False
-            plus_button_pressed = False
-            
-        def draw_feedback_buttons():
-            # Determine button colors based on pressed state
-            minus_color = (150, 0, 0) if minus_button_pressed else (200, 0, 0)  # Darker red when pressed
-            plus_color = (0, 150, 0) if plus_button_pressed else (0, 200, 0)    # Darker green when pressed
-            
-            pygame.draw.rect(self.screen, minus_color, minus_button)
-            pygame.draw.rect(self.screen, plus_color, plus_button)
-            
-            minus_text = feedback_font.render("-", True, (255, 255, 255))
-            plus_text = feedback_font.render("+", True, (255, 255, 255))
-            
-            self.screen.blit(minus_text, (
-                minus_button.centerx - minus_text.get_width() // 2, 
-                minus_button.centery - minus_text.get_height() // 2
-            ))
-            self.screen.blit(plus_text, (
-                plus_button.centerx - plus_text.get_width() // 2, 
-                plus_button.centery - plus_text.get_height() // 2
-            ))
-
-        
-        pygame.mouse.set_visible(True)  # Hide default cursor for custom cursor
-    
         
         global frame_ct
         # Initialize the environment.
@@ -750,13 +678,13 @@ class PyGameGUI:
             while not self.selected:
                 self.screen.fill(Colors.SCREEN_BACKGROUND)         
                 
-                small_text_font = pygame.font.Font("fonts/gyparody_hv.ttf", int(22*(self.CELL_SIZE/40.0)))  
+                small_text_font = pygame.font.Font(self.base_dir+"fonts/gyparody_hv.ttf", int(22*(self.CELL_SIZE/40.0)))  
                 car_names = ['Amber','Jade','Ruby']     
                 disp_text = self.text_font.render("Select a Vehicle", True, (0, 0, 0))
              
                 self.screen.blit(disp_text, (self.screen_size[0]//2 - disp_text.get_width()//2 , self.screen_size[1] // 3 - disp_text.get_height() ))
                 
-                smaller_text_font = pygame.font.Font("fonts/gyparody_hv.ttf", int(16*(self.CELL_SIZE/40.0))) 
+                smaller_text_font = pygame.font.Font(self.base_dir+"fonts/gyparody_hv.ttf", int(16*(self.CELL_SIZE/40.0))) 
                 disp_text = smaller_text_font.render("Press <Enter> to confirm", True, (90, 90, 90))    
                 self.screen.blit(disp_text, (15 + self.screen_size[0] // 2 - disp_text.get_width()// 2 , self.screen_size[1]*2 // 3 + disp_text.get_height()//2 ))
                 
@@ -783,8 +711,7 @@ class PyGameGUI:
                 
                 for event in pygame.event.get():
                     if event.type == pygame.KEYDOWN:
-                        # if event.key == pygame.K_RETURN:
-                        if event.key == pygame.K_SPACE:
+                        if event.key == pygame.K_RETURN:
                              self.selected = True
                              #self.pause = False                        
                         elif event.key == pygame.K_RIGHT:
@@ -797,15 +724,9 @@ class PyGameGUI:
                             self.set_icon_scheme(self.selected_icon_scheme) 
                         elif event.key == pygame.K_ESCAPE:
                             raise QuitRequestedError
-
-                    if event.type == pygame.MOUSEBUTTONDOWN and collect_feedback:
-                        if minus_button.collidepoint(event.pos):
-                            feedback_log.append({"time": time.time(), "reward": -1})
-                        elif plus_button.collidepoint(event.pos):
-                            feedback_log.append({"time": time.time(), "reward": +1})
-
                     if event.type == pygame.QUIT:
                         raise QuitRequestedError
+                        
                     
                 pygame.display.update()          
                 self.fps_clock.tick(20)
@@ -820,10 +741,13 @@ class PyGameGUI:
             
             
         self.render()
-        start_text_font = pygame.font.Font("fonts/gyparody_hv.ttf", int(42*(self.CELL_SIZE/40.0))) 
+        start_text_font = pygame.font.Font(self.base_dir+"fonts/gyparody_hv.ttf", int(42*(self.CELL_SIZE/40.0))) 
         disp_text = start_text_font.render("Press <Space> to Start", True, (220, 220, 220))
         self.screen.blit(disp_text, (self.screen_size[0] // 2 - disp_text.get_width()// 2 , self.screen_size[1] // 2 - disp_text.get_height()//2 ))          
         pygame.display.update()
+        
+                
+        
 
         # Main game loop.
         running = True
@@ -846,25 +770,6 @@ class PyGameGUI:
 
                 if event.type == pygame.QUIT:
                     self.quit_game()
-                    
-                if event.type == pygame.MOUSEBUTTONDOWN and collect_feedback:
-                    if minus_button.collidepoint(event.pos):
-                        feedback_log.append({"time": time.time(), "reward": -1})
-                        minus_button_pressed = True  # Set pressed state
-                        
-                        # ADD ErrP Trigger here. NEGATIVE Reward was assigned by the human.
-                        
-                    elif plus_button.collidepoint(event.pos):
-                        feedback_log.append({"time": time.time(), "reward": +1})
-                        plus_button_pressed = True  # Set pressed state
-                        
-                        # ADD ErrP Trigger here. POSITIVE Reward was assigned by the human.
-                        
-                
-                if event.type == pygame.MOUSEBUTTONUP and collect_feedback:
-                    minus_button_pressed = False  # Reset pressed state
-                    plus_button_pressed = False   # Reset pressed state
-
 
             self.handle_pause()
 
@@ -873,8 +778,6 @@ class PyGameGUI:
                 self.begin_sound.play()
 
             if self.last_head == [0,0]:
-
-                
                 for interpolate_idx in range(4): 
                     cell_coords = pygame.Rect(
                         self.env.snake.head[0]*self.CELL_SIZE,
@@ -899,14 +802,10 @@ class PyGameGUI:
                 pygame.draw.rect(self.screen, Colors.SCREEN_BACKGROUND, cell_coords)
                 if self.collaborating_agent is not None:
                     pygame.draw.rect(self.screen, Colors.SCREEN_BACKGROUND, cell_coords_collaborator)
-                if collect_feedback:
-                    draw_feedback_buttons()
-                    
 
             # Update game state.
             timestep_timed_out = self.timestep_watch.time() >= self.timestep_delay
             human_made_move = is_human_agent and action != SnakeAction.MAINTAIN_DIRECTION
-            
                     
             if timestep_timed_out or human_made_move:
                 self.timestep_watch.reset()
@@ -920,7 +819,7 @@ class PyGameGUI:
                         # collaborator_action = self.collaborating_agent.act(timestep_result_collaborator.observation, timestep_result_collaborator.reward)
                         collaborator_action = self.collaborating_agent.act(timestep_result.observation, timestep_result_collaborator.reward)
                     except:
-                        smaller_text_font = pygame.font.Font("fonts/gyparody_hv.ttf", int(36*(self.CELL_SIZE/40.0))) 
+                        smaller_text_font = pygame.font.Font(self.base_dir+"fonts/gyparody_hv.ttf", int(36*(self.CELL_SIZE/40.0))) 
                         disp_text = smaller_text_font.render("Round Finished", True, (220, 220, 220))    
                         self.screen.blit(disp_text, (15 + self.screen_size[0] // 2 - disp_text.get_width()// 2 , self.screen_size[1]*2 // 3 + disp_text.get_height()//2 ))
                         pygame.display.update()
@@ -929,14 +828,6 @@ class PyGameGUI:
                         running = False
                 
                 self.env.choose_action(action)
-                
-                # ADD ErrP trigger here
-                # VEHICLE STARTED TO MOVE...
-                # parallel.signal(100)
-                self.parallel.signal(100)
-           
-                print(1)
-                
                 if self.collaborating_agent is not None:
                     self.env.choose_action_collaborator(collaborator_action)
 
@@ -963,7 +854,7 @@ class PyGameGUI:
 
                 if timestep_result.is_episode_end:
                     
-                    smaller_text_font = pygame.font.Font("fonts/gyparody_hv.ttf", int(36*(self.CELL_SIZE/40.0))) 
+                    smaller_text_font = pygame.font.Font(self.base_dir+"fonts/gyparody_hv.ttf", int(36*(self.CELL_SIZE/40.0))) 
                     disp_text = smaller_text_font.render("Round Finished", True, (220, 220, 220))    
                     self.screen.blit(disp_text, (15 + self.screen_size[0] // 2 - disp_text.get_width()// 2 , self.screen_size[1]*2 // 3 + disp_text.get_height()//2 ))
                     pygame.display.update()
@@ -973,7 +864,7 @@ class PyGameGUI:
                  
                 if self.collaborating_agent is not None and timestep_result_collaborator.is_episode_end:
                     
-                    smaller_text_font = pygame.font.Font("fonts/gyparody_hv.ttf", int(36*(self.CELL_SIZE/40.0))) 
+                    smaller_text_font = pygame.font.Font(self.base_dir+"fonts/gyparody_hv.ttf", int(36*(self.CELL_SIZE/40.0))) 
                     disp_text = smaller_text_font.render("Round Finished", True, (220, 220, 220))    
                     self.screen.blit(disp_text, (15 + self.screen_size[0] // 2 - disp_text.get_width()// 2 , self.screen_size[1]*2 // 3 + disp_text.get_height()//2 ))
                     pygame.display.update()
@@ -1025,40 +916,9 @@ class PyGameGUI:
                                 self.pause = True
                             if event.key == pygame.K_ESCAPE:
                                 self.quit_game()
-                                
-                                
 
                         if event.type == pygame.QUIT:
                             self.quit_game()
-
-                        if collect_feedback:
-                            flag_reward_minus, flag_reward_plus = False, False
-                            if event.type == pygame.MOUSEBUTTONDOWN:
-                                print(f"Button {event.button} pressed")
-                                flag_reward_minus |= (not minus_button_pressed) and minus_button.collidepoint(event.pos)
-                                flag_reward_plus  |= (not plus_button_pressed) and plus_button.collidepoint(event.pos)
-
-                            if event.type == pygame.JOYBUTTONDOWN:
-                                print(f"JOY Button {event.button} pressed")
-                                flag_reward_minus |= (not minus_button_pressed) and (event.button == 4) # Xbox controller LB
-                                flag_reward_plus  |= (not plus_button_pressed) and (event.button == 5) # Xbox controller RB
-
-
-                            if flag_reward_minus:
-                                feedback_log.append({"time": time.time(), "reward": -1})
-                                minus_button_pressed = True  # Set pressed state
-                                self.parallel.signal(103)
-                                print(3)
-                                
-                            if flag_reward_plus:
-                                feedback_log.append({"time": time.time(), "reward": +1})
-                                plus_button_pressed = True  # Set pressed state
-                                self.parallel.signal(102)
-                                print(2)
-                        
-                        if event.type == pygame.MOUSEBUTTONUP or event.type == pygame.JOYBUTTONUP:
-                            minus_button_pressed = False  # Reset pressed state
-                            plus_button_pressed = False   # Reset pressed state
 
                     self.handle_pause()
   
@@ -1066,19 +926,14 @@ class PyGameGUI:
                         imm_coords = self.transition_animation(imm_coords, x ,y, x0, y0, timestep_result.reward, self.curr_icon, interpolate_idx, False, imm_coords_collaborator)
                         imm_coords_collaborator = self.transition_animation(imm_coords_collaborator, x_collaborator ,y_collaborator, x0_collaborator, y0_collaborator, timestep_result_collaborator.reward, self.curr_icon_collaborator, interpolate_idx, True) 
                     else:
-                        
                         imm_coords = self.transition_animation(imm_coords, x ,y, x0, y0, timestep_result.reward, self.curr_icon, interpolate_idx, False)
 
                     if self.collaborating_agent is not None: 
                         self.render_scoreboard(score, time_remaining, timestep_result.reward + timestep_result_collaborator.reward)
                     else: 
                         self.render_scoreboard(score, time_remaining, timestep_result.reward )
-                    pygame.display.set_caption(f'Robotaxi [Score: {score:01d}]   |   [Steps Remaining: {time_remaining:01d}]')       
-                    if collect_feedback:
-                        draw_feedback_buttons()
-                                 
+                    pygame.display.set_caption(f'Robotaxi [Score: {score:01d}]   |   [Steps Remaining: {time_remaining:01d}]')                    
                     pygame.display.update()
-                    
                     self.fps_clock.tick(self.intermediate_frames+5)
                
                 pygame.draw.rect(self.screen, Colors.SCREEN_BACKGROUND, imm_coords)
@@ -1104,18 +959,8 @@ class PyGameGUI:
                     self.render_scoreboard(score, time_remaining, timestep_result.reward +  timestep_result_collaborator.reward)
                 else: 
                     self.render_scoreboard(score, time_remaining, timestep_result.reward )
-
-                if collect_feedback:
-                    draw_feedback_buttons()
-                                    
                 pygame.display.update()
                 self.fps_clock.tick(self.FPS_LIMIT)
-        if collect_feedback:
-            curr_time = time.strftime("%Y%m%d_%H%M%S")
-            filename = f"{participant_idx}_{curr_time}.json"
-            with open(filename, "w") as feedback_file:
-                json.dump(feedback_log, feedback_file, indent=4)
-
 
 
 class Stopwatch(object):
